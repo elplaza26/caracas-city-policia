@@ -1,27 +1,275 @@
 <!doctype html>
 <html lang="es">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Caracas City Policía | Panel</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0a1020">
+<title>Caracas City Policía · Postulaciones</title>
 <style>
-:root{color-scheme:dark;--bg:#0a1020;--panel:#111b30;--line:#25334c;--text:#eef3ff;--muted:#91a1bc;--red:#c6293b;--red2:#8e1829;--blue:#243c63}
-*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top right,#1c2945 0,transparent 45%),var(--bg);font:15px/1.5 Inter,system-ui,Segoe UI,sans-serif;color:var(--text)}button,input,select,textarea{font:inherit}button{cursor:pointer}.shell{max-width:1200px;margin:auto;padding:28px 22px}.top{display:flex;align-items:center;justify-content:space-between;gap:20px;border-bottom:1px solid var(--line);padding-bottom:22px}.brand{display:flex;align-items:center;gap:14px}.crest{width:52px;height:52px;border-radius:14px;background:linear-gradient(145deg,var(--red),var(--red2));display:grid;place-items:center;font-size:26px;font-weight:900;box-shadow:0 8px 30px #c6293b33}.eyebrow{color:#ff8b98;font-size:11px;font-weight:800;letter-spacing:.18em;text-transform:uppercase}.brand h1{font-size:22px;margin:2px 0 0}.status{font-size:12px;color:#ffcf7b;border:1px solid #6c542b;background:#322818;border-radius:99px;padding:7px 11px}.welcome{padding:32px 0 20px}.welcome h2{font-size:clamp(24px,4vw,36px);margin:0 0 8px;letter-spacing:-.03em}.welcome p{margin:0;color:var(--muted);max-width:700px}.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:20px 0}.stat,.card{background:linear-gradient(150deg,#141f35,#10192b);border:1px solid var(--line);border-radius:16px}.stat{padding:18px}.stat span{color:var(--muted);font-size:13px}.stat strong{display:block;font-size:28px;margin-top:6px}.tabs{display:flex;gap:8px;border-bottom:1px solid var(--line);margin:26px 0 18px;flex-wrap:wrap}.tab{border:1px solid transparent;color:var(--muted);background:transparent;padding:12px 16px;border-radius:10px 10px 0 0;font-weight:700}.tab.active{color:white;background:#1b2942;border-color:var(--line);border-bottom-color:#1b2942;box-shadow:inset 0 -2px var(--red)}.layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,.8fr);gap:16px}.card{padding:22px}.card h3{margin:0 0 5px;font-size:18px}.sub{color:var(--muted);font-size:13px;margin:0 0 20px}.field{display:grid;gap:6px;margin:13px 0}.field label{font-size:13px;color:#c7d3e8;font-weight:650}.field input,.field select,.field textarea{width:100%;border:1px solid #34435d;background:#0b1425;color:var(--text);border-radius:9px;padding:11px 12px;outline:none}.field input:focus,.field select:focus,.field textarea:focus{border-color:#e44b5d}.field textarea{min-height:90px;resize:vertical}.primary{border:0;background:linear-gradient(100deg,var(--red),#a91d31);color:white;padding:11px 16px;border-radius:9px;font-weight:800;width:100%;margin-top:8px}.secondary{border:1px solid #34435d;background:#17243a;color:#e6edfb;padding:9px 12px;border-radius:9px}.list{display:grid;gap:10px}.empty{padding:26px 14px;text-align:center;border:1px dashed #34435d;border-radius:12px;color:var(--muted)}.notice{border:1px solid #69502c;background:#2b2419;color:#f7dca9;border-radius:12px;padding:13px 15px;font-size:13px;margin-top:18px}.record{padding:13px;border:1px solid var(--line);border-radius:10px;background:#0d1729}.record b{display:block}.record small{color:var(--muted)}.record p{margin:6px 0 0;color:#cbd5e7;white-space:pre-wrap}.footer{color:#63728c;font-size:12px;padding:26px 0 8px;text-align:center}@media(max-width:780px){.layout{grid-template-columns:1fr}.stats{grid-template-columns:1fr}.top{align-items:flex-start}.status{max-width:130px;text-align:center}.shell{padding:18px 14px}}
+:root{color-scheme:dark;--bg:#080e19;--panel:#111c2d;--panel2:#17253a;--line:#2a3a54;--text:#edf3ff;--muted:#9aabc4;--gold:#e5bd5b;--green:#54c69b;--red:#ed7777;--blue:#73a9ff}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 90% 0,#1a2b49 0,transparent 40%),var(--bg);font:14px/1.5 Inter,system-ui,Segoe UI,Arial,sans-serif;color:var(--text);min-height:100vh}button,input,textarea{font:inherit}button{cursor:pointer}.shell{max-width:1180px;margin:auto;padding:28px 20px 50px}.top{display:flex;align-items:center;justify-content:space-between;gap:16px;padding-bottom:22px;border-bottom:1px solid var(--line)}.brand{display:flex;align-items:center;gap:13px}.crest{width:50px;height:50px;display:grid;place-items:center;border-radius:14px;background:linear-gradient(145deg,#e5bd5b,#926b22);color:#101722;font-weight:950;font-size:18px;box-shadow:0 8px 28px #e5bd5b25}.eyebrow{font-size:10px;font-weight:800;letter-spacing:.2em;text-transform:uppercase;color:var(--gold)}h1{font-size:21px;line-height:1.2;margin:4px 0 0}.connection{font-size:11px;color:var(--muted);border:1px solid var(--line);background:#111b2b;padding:7px 10px;border-radius:999px;white-space:nowrap}.intro{padding:27px 0 17px}.intro h2{font-size:clamp(24px,4vw,34px);letter-spacing:-.04em;margin:0 0 7px}.intro p{color:var(--muted);margin:0;max-width:760px}.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:15px 0 22px}.stat,.panel,.candidate{border:1px solid var(--line);border-radius:14px;background:linear-gradient(145deg,#131f33,#0f1929);box-shadow:0 10px 26px #0002}.stat{padding:16px}.stat span{font-size:12px;color:var(--muted)}.stat strong{display:block;font-size:29px;margin-top:5px}.toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:18px 0}.toolbar h2{font-size:18px;margin:0}.search{min-width:220px;max-width:420px;width:100%;border:1px solid var(--line);background:#0b1422;color:var(--text);padding:10px 12px;border-radius:9px;outline:none}.btn{border:1px solid #3a4e6c;background:#1a2b43;color:var(--text);padding:9px 12px;border-radius:9px;font-size:12px;font-weight:750}.btn:hover{filter:brightness(1.15)}.btn:disabled{opacity:.45;cursor:not-allowed}.btn.primary{background:var(--gold);border-color:var(--gold);color:#111722}.btn.accept{background:#15392f;border-color:#28634f;color:#91edc5}.btn.reject{background:#3a2029;border-color:#693746;color:#ffb5bd}.btn.ghost{background:transparent}.candidate-list{display:grid;gap:13px}.candidate{padding:18px}.candidate-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px}.candidate h3{font-size:17px;margin:0 0 4px;overflow-wrap:anywhere}.muted{color:var(--muted);font-size:12px;overflow-wrap:anywhere}.badge{display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border:1px solid var(--line);border-radius:999px;font-size:11px;white-space:nowrap}.badge.pending{color:#f5d68c;border-color:#65532c;background:#302818}.badge.accepted{color:#8de4bd;border-color:#2b5d4a;background:#153329}.badge.rejected{color:#ffb2b9;border-color:#653543;background:#321e27}.details{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;margin:14px 0}.detail{background:#0c1523;border:1px solid #202f46;border-radius:9px;padding:10px;min-width:0}.detail b{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#91a5c2;margin-bottom:4px}.detail span{white-space:pre-wrap;overflow-wrap:anywhere}.candidate-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;border-top:1px solid #25344a;padding-top:13px}.candidate-actions .spacer{flex:1}.empty{border:1px dashed #354761;border-radius:12px;padding:34px 16px;text-align:center;color:var(--muted)}.notice{border:1px solid #594b2b;background:#292419;color:#ead7a5;border-radius:11px;padding:12px 14px;font-size:12px;margin:16px 0}.login-wrap{max-width:500px;margin:50px auto}.panel{padding:24px}.panel h2{font-size:21px;margin:0 0 7px}.panel p{color:var(--muted);margin:0 0 17px}.field{display:grid;gap:7px;margin:15px 0}.field label{font-size:12px;color:#c4d1e5;font-weight:700}.field input{width:100%;padding:12px;border:1px solid #34455f;background:#0b1422;color:var(--text);border-radius:9px;outline:none;letter-spacing:.12em;text-transform:uppercase}.field input:focus,.search:focus{border-color:var(--gold)}.login-actions{display:flex;gap:9px;align-items:center}.login-actions .btn{flex:1;padding:12px}.error{color:#ffb3ba;font-size:12px;margin-top:12px;min-height:18px}.hidden{display:none!important}.toast{position:fixed;right:18px;bottom:18px;max-width:min(460px,calc(100vw - 36px));padding:13px 16px;background:#162840;border:1px solid #3a5577;border-radius:10px;box-shadow:0 14px 40px #0006;z-index:20}.footer{text-align:center;color:#637793;font-size:11px;padding-top:28px}
+@media(max-width:680px){.shell{padding:17px 12px 36px}.top{align-items:flex-start}.crest{width:42px;height:42px}.brand h1{font-size:17px}.connection{font-size:10px;white-space:normal;text-align:center;max-width:115px}.stats{gap:7px}.stat{padding:11px}.stat span{font-size:10px}.stat strong{font-size:24px}.candidate{padding:13px}.candidate-head{display:block}.candidate-head .badge{margin-top:8px}.details{grid-template-columns:1fr}.toolbar{align-items:stretch}.toolbar .search{max-width:none}.login-wrap{margin:30px auto}.panel{padding:18px}}
 </style>
 </head>
-<body><main class="shell">
-<header class="top"><div class="brand"><div class="crest">CC</div><div><div class="eyebrow">Caracas City · Departamento policial</div><h1>Panel de Gestión Policial</h1></div></div><div class="status">● Integración pendiente</div></header>
-<section class="welcome"><h2>Gestión interna, clara y centralizada.</h2><p>Panel para gestionar ascensos y preinscripciones de Caracas City Policía. La conexión segura con la base de datos y Discord debe configurarse antes de utilizarlo con registros reales.</p></section>
-<section class="stats"><div class="stat"><span>Ascensos registrados en esta sesión</span><strong id="statAsc">0</strong></div><div class="stat"><span>Preinscripciones en esta sesión</span><strong id="statPre">0</strong></div><div class="stat"><span>Estado de conexión</span><strong style="font-size:19px;color:#ffcf7b">Pendiente</strong></div></section>
-<nav class="tabs" aria-label="Secciones"><button class="tab active" data-tab="ascensos">Ascensos</button><button class="tab" data-tab="preinscripciones">Preinscripciones</button></nav>
-<section id="ascensos" class="layout"><form class="card" id="formAsc"><h3>Registrar ascenso</h3><p class="sub">Introduce los datos del funcionario y el nuevo rango.</p><div class="field"><label for="aNombre">Nombre del funcionario</label><input id="aNombre" required maxlength="100" placeholder="Nombre y apellido"></div><div class="field"><label for="aDiscord">Usuario o ID de Discord (opcional)</label><input id="aDiscord" maxlength="100" placeholder="@usuario o ID"></div><div class="field"><label for="aAnterior">Rango actual</label><input id="aAnterior" required maxlength="80" placeholder="Rango actual"></div><div class="field"><label for="aNuevo">Nuevo rango</label><input id="aNuevo" required maxlength="80" placeholder="Nuevo rango"></div><div class="field"><label for="aMotivo">Motivo / observaciones</label><textarea id="aMotivo" maxlength="1000" placeholder="Motivo del ascenso"></textarea></div><button class="primary">Guardar borrador</button></form><div class="card"><h3>Últimos ascensos</h3><p class="sub">Borradores creados en este navegador.</p><div class="list" id="listAsc"><div class="empty">Todavía no hay ascensos en esta sesión.</div></div></div></section>
-<section id="preinscripciones" class="layout" hidden><form class="card" id="formPre"><h3>Nueva preinscripción</h3><p class="sub">Registro inicial de un aspirante a la policía.</p><div class="field"><label for="pNombre">Nombre completo</label><input id="pNombre" required maxlength="100" placeholder="Nombre y apellido"></div><div class="field"><label for="pDiscord">ID de Discord</label><input id="pDiscord" required maxlength="100" placeholder="ID o usuario de Discord"></div><div class="field"><label for="pEdad">Edad</label><input id="pEdad" type="number" min="16" max="99" required placeholder="Edad"></div><div class="field"><label for="pExperiencia">Experiencia previa</label><textarea id="pExperiencia" maxlength="1000" placeholder="Experiencia policial o roleplay"></textarea></div><div class="field"><label for="pMotivo">¿Por qué quieres ingresar?</label><textarea id="pMotivo" required maxlength="1500" placeholder="Motivación del aspirante"></textarea></div><button class="primary">Guardar borrador</button></form><div class="card"><h3>Últimas preinscripciones</h3><p class="sub">Borradores creados en este navegador.</p><div class="list" id="listPre"><div class="empty">Todavía no hay preinscripciones en esta sesión.</div></div></div></section>
-<div class="notice"><b>Importante:</b> esta primera versión visual guarda únicamente borradores temporales en la página abierta. Aún no guarda en Supabase ni envía avisos a Discord. No introduzcas datos reales hasta terminar la integración.</div>
-<footer class="footer">Caracas City Policía · Panel administrativo · Versión inicial</footer></main>
+<body>
+<main class="shell">
+  <header class="top">
+    <div class="brand"><div class="crest">CC</div><div><div class="eyebrow">Caracas City · Departamento policial</div><h1>Panel de postulaciones</h1></div></div>
+    <div id="connection" class="connection">Comprobando conexión…</div>
+  </header>
+
+  <section id="loginView" class="login-wrap">
+    <div class="panel">
+      <div class="eyebrow">Acceso restringido</div>
+      <h2>Entrar al panel policial</h2>
+      <p>Solo el personal autorizado de Caracas City puede consultar y resolver candidaturas.</p>
+      <div class="notice">En el servidor de Discord ejecuta <b>/panel_codigo</b>. El bot te enviará un código privado que caduca en 5 minutos y solo se puede usar una vez.</div>
+      <form id="loginForm">
+        <div class="field"><label for="loginCode">Código temporal de Discord</label><input id="loginCode" name="code" autocomplete="one-time-code" minlength="10" maxlength="10" placeholder="XXXXXXXXXX" required></div>
+        <div class="login-actions"><button id="loginButton" class="btn primary" type="submit">Acceder</button></div>
+        <div id="loginError" class="error" role="alert"></div>
+      </form>
+    </div>
+  </section>
+
+  <section id="appView" class="hidden">
+    <section class="intro"><h2>Revisión de candidaturas</h2><p>Consulta las solicitudes recibidas, acepta o rechaza cada candidatura y verifica la asignación del rol policial en Discord.</p></section>
+    <section class="stats">
+      <div class="stat"><span>Pendientes</span><strong id="countPending">0</strong></div>
+      <div class="stat"><span>Aceptadas</span><strong id="countAccepted">0</strong></div>
+      <div class="stat"><span>Rechazadas</span><strong id="countRejected">0</strong></div>
+    </section>
+    <div class="toolbar">
+      <h2>Candidaturas recibidas</h2>
+      <div style="display:flex;gap:8px;flex:1;justify-content:flex-end;flex-wrap:wrap">
+        <input id="search" class="search" type="search" placeholder="Buscar nombre o usuario de Discord…">
+        <button id="refreshButton" class="btn" type="button">Actualizar</button>
+        <button id="logoutButton" class="btn ghost" type="button">Salir</button>
+      </div>
+    </div>
+    <div id="appNotice" class="notice hidden"></div>
+    <div id="candidateList" class="candidate-list"><div class="empty">Cargando candidaturas…</div></div>
+  </section>
+  <footer class="footer">Caracas City Policía · Acceso administrativo protegido · Las decisiones se registran en la base de datos y se notifican en Discord.</footer>
+</main>
+<div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 <script>
-const data={ascensos:[],preinscripciones:[]};
-document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===b));document.getElementById('ascensos').hidden=b.dataset.tab!=='ascensos';document.getElementById('preinscripciones').hidden=b.dataset.tab!=='preinscripciones'}));
-function addRecord(type,fields){data[type].unshift({...fields,at:new Date().toLocaleString('es-ES')});render(type);document.getElementById(type==='ascensos'?'statAsc':'statPre').textContent=data[type].length}
-function render(type){const el=document.getElementById(type==='ascensos'?'listAsc':'listPre');el.replaceChildren();if(!data[type].length){const e=document.createElement('div');e.className='empty';e.textContent='Todavía no hay registros en esta sesión.';el.append(e);return}data[type].forEach(r=>{const box=document.createElement('div');box.className='record';const b=document.createElement('b');b.textContent=type==='ascensos'?r.nombre+' · '+r.nuevo:r.nombre+' · Aspirante';const small=document.createElement('small');small.textContent=r.at;const p=document.createElement('p');p.textContent=type==='ascensos'?r.anterior+' → '+r.nuevo+(r.motivo?'\n'+r.motivo:''):'Discord: '+r.discord+' · Edad: '+r.edad+'\n'+r.motivo;box.append(b,small,p);el.append(box)})}
-document.getElementById('formAsc').addEventListener('submit',e=>{e.preventDefault();addRecord('ascensos',{nombre:aNombre.value,discord:aDiscord.value,anterior:aAnterior.value,nuevo:aNuevo.value,motivo:aMotivo.value});e.target.reset()});
-document.getElementById('formPre').addEventListener('submit',e=>{e.preventDefault();addRecord('preinscripciones',{nombre:pNombre.value,discord:pDiscord.value,edad:pEdad.value,experiencia:pExperiencia.value,motivo:pMotivo.value});e.target.reset()});
-</script></body></html>
+const API_BASE = "https://ngkmylqsdeevdtrjrgfn.supabase.co/functions/v1/caracas-police-panel";
+const TOKEN_KEY = "caracasPolicePanelSession";
+let token = sessionStorage.getItem(TOKEN_KEY) || "";
+let applications = [];
+let toastTimer;
+
+const $ = (id) => document.getElementById(id);
+function showToast(message) {
+  $("toast").textContent = message;
+  $("toast").classList.remove("hidden");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => $("toast").classList.add("hidden"), 4500);
+}
+function showLogin() {
+  token = "";
+  sessionStorage.removeItem(TOKEN_KEY);
+  $("loginView").classList.remove("hidden");
+  $("appView").classList.add("hidden");
+}
+function showApp() {
+  $("loginView").classList.add("hidden");
+  $("appView").classList.remove("hidden");
+}
+async function request(action, options) {
+  options = options || {};
+  const headers = {"Content-Type":"application/json"};
+  if (token && action !== "login") headers.Authorization = "Bearer " + token;
+  const response = await fetch(API_BASE + "?panel=" + encodeURIComponent(action), {
+    method: options.method || (action === "data" ? "GET" : "POST"),
+    headers,
+    body: options.body ? JSON.stringify(options.body) : undefined
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    if (response.status === 401 && action !== "login") showLogin();
+    throw new Error(result.error || ("Error HTTP " + response.status));
+  }
+  return result;
+}
+function niceDate(value) {
+  if (!value) return "—";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("es-ES", {dateStyle:"medium",timeStyle:"short"});
+}
+function detail(label, value) {
+  const box = document.createElement("div");
+  box.className = "detail";
+  const title = document.createElement("b");
+  title.textContent = label;
+  const content = document.createElement("span");
+  content.textContent = value === null || value === undefined || value === "" ? "—" : String(value);
+  box.append(title, content);
+  return box;
+}
+function badgeFor(app) {
+  const badge = document.createElement("span");
+  const retry = app.status === "accepted" && !app.role_assigned_at;
+  badge.className = "badge " + (app.status === "pending" ? "pending" : app.status === "accepted" ? "accepted" : "rejected");
+  badge.textContent = app.status === "pending" ? "Pendiente" : app.status === "accepted" ? (retry ? "Aceptada · rol pendiente" : "Aceptada · rol asignado") : "Rechazada";
+  return badge;
+}
+function decisionButton(label, action, className, app) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "btn " + className;
+  button.textContent = label;
+  button.addEventListener("click", () => decide(app, action, button));
+  return button;
+}
+function renderApplications() {
+  const list = $("candidateList");
+  list.replaceChildren();
+  const q = $("search").value.trim().toLocaleLowerCase("es");
+  const visible = applications.filter(app => [
+    app.full_name, app.discord_username, app.discord_user_id, app.status
+  ].join(" ").toLocaleLowerCase("es").includes(q));
+  $("countPending").textContent = applications.filter(a => a.status === "pending").length;
+  $("countAccepted").textContent = applications.filter(a => a.status === "accepted").length;
+  $("countRejected").textContent = applications.filter(a => a.status === "rejected").length;
+  if (!visible.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.textContent = applications.length ? "No hay candidaturas que coincidan con la búsqueda." : "Todavía no hay candidaturas registradas.";
+    list.append(empty);
+    return;
+  }
+  visible.forEach(app => {
+    const card = document.createElement("article");
+    card.className = "candidate";
+    const head = document.createElement("div");
+    head.className = "candidate-head";
+    const identity = document.createElement("div");
+    const name = document.createElement("h3");
+    name.textContent = app.full_name || "Candidato sin nombre";
+    const discordName = document.createElement("div");
+    discordName.className = "muted";
+    discordName.textContent = (app.discord_username || "Usuario de Discord") + " · ID " + (app.discord_user_id || "—");
+    identity.append(name, discordName);
+    head.append(identity, badgeFor(app));
+    const grid = document.createElement("div");
+    grid.className = "details";
+    grid.append(
+      detail("Fecha de solicitud", niceDate(app.created_at)),
+      detail("Edad", app.age),
+      detail("Disponibilidad", app.availability),
+      detail("Experiencia previa", app.previous_experience),
+      detail("Motivación", app.motivation),
+      detail("Motivo de decisión", app.decision_reason)
+    );
+    const actions = document.createElement("div");
+    actions.className = "candidate-actions";
+    const pending = app.status === "pending";
+    const retryRole = app.status === "accepted" && !app.role_assigned_at;
+    if (pending || retryRole) {
+      actions.append(decisionButton(retryRole ? "Reintentar asignación del rol" : "Aceptar y asignar rol", "accept", "accept", app));
+      if (pending) actions.append(decisionButton("Rechazar", "reject", "reject", app));
+    } else {
+      const done = document.createElement("span");
+      done.className = "muted";
+      done.textContent = app.status === "accepted" ? "Rol confirmado: " + niceDate(app.role_assigned_at) : "Revisada: " + niceDate(app.reviewed_at);
+      actions.append(done);
+    }
+    const spacer = document.createElement("span");
+    spacer.className = "spacer";
+    const updated = document.createElement("span");
+    updated.className = "muted";
+    updated.textContent = app.reviewed_by_name ? "Revisado por " + app.reviewed_by_name : "";
+    actions.append(spacer, updated);
+    card.append(head, grid, actions);
+    list.append(card);
+  });
+}
+async function loadApplications() {
+  $("refreshButton").disabled = true;
+  $("refreshButton").textContent = "Actualizando…";
+  try {
+    const result = await request("data");
+    applications = result.applications || [];
+    $("appNotice").classList.add("hidden");
+    renderApplications();
+  } catch (error) {
+    if (token) {
+      $("appNotice").textContent = error.message;
+      $("appNotice").classList.remove("hidden");
+    } else {
+      $("loginError").textContent = error.message;
+    }
+  } finally {
+    $("refreshButton").disabled = false;
+    $("refreshButton").textContent = "Actualizar";
+  }
+}
+async function decide(app, action, button) {
+  if (action === "accept" && !confirm("¿Aceptar a " + app.full_name + " y asignarle el rol de Policía en Discord?")) return;
+  let reason = "";
+  if (action === "reject") {
+    if (!confirm("¿Rechazar la candidatura de " + app.full_name + "?")) return;
+    reason = prompt("Motivo del rechazo (opcional):", "") || "";
+  }
+  button.disabled = true;
+  const previous = button.textContent;
+  button.textContent = "Procesando…";
+  try {
+    const result = await request("decision", {method:"POST",body:{id:app.id,action,reason}});
+    if (result.discord_synced === false) showToast("Decisión guardada, pero Discord no confirmó la actualización del mensaje.");
+    else showToast(action === "accept" ? "Candidatura aceptada y rol de Policía asignado." : "Candidatura rechazada y reflejada en Discord.");
+    await loadApplications();
+  } catch (error) {
+    showToast(error.message);
+    button.disabled = false;
+    button.textContent = previous;
+    await loadApplications();
+  }
+}
+$("loginForm").addEventListener("submit", async event => {
+  event.preventDefault();
+  $("loginError").textContent = "";
+  $("loginButton").disabled = true;
+  $("loginButton").textContent = "Verificando…";
+  try {
+    const result = await request("login", {method:"POST",body:{code:$("loginCode").value.trim().toUpperCase()}});
+    token = result.token;
+    sessionStorage.setItem(TOKEN_KEY, token);
+    $("loginCode").value = "";
+    showApp();
+    await loadApplications();
+  } catch (error) {
+    $("loginError").textContent = error.message;
+  } finally {
+    $("loginButton").disabled = false;
+    $("loginButton").textContent = "Acceder";
+  }
+});
+$("loginCode").addEventListener("input", event => { event.target.value = event.target.value.toUpperCase().replace(/[^A-HJ-NP-Z2-9]/g, "").slice(0,10); });
+$("refreshButton").addEventListener("click", loadApplications);
+$("logoutButton").addEventListener("click", () => { showLogin(); $("loginError").textContent = ""; showToast("Sesión cerrada."); });
+$("search").addEventListener("input", renderApplications());
+
+async function checkConnection() {
+  try {
+    const response = await fetch(API_BASE);
+    const result = await response.json();
+    $("connection").textContent = response.ok && result.ok ? "● API disponible" : "● API sin verificar";
+    $("connection").style.color = response.ok && result.ok ? "#8de4bd" : "#ffcf7b";
+  } catch {
+    $("connection").textContent = "● Sin conexión con la API";
+    $("connection").style.color = "#ffb2b9";
+  }
+}
+checkConnection();
+if (token) {
+  showApp();
+  loadApplications();
+} else {
+  showLogin();
+}
+</script>
+</body>
+</html>
