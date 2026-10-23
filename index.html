@@ -256,8 +256,21 @@ async function checkConnection() {
   try {
     const response = await fetch(API_BASE);
     const result = await response.json();
-    $("connection").textContent = response.ok && result.ok ? "● API disponible" : "● API sin verificar";
-    $("connection").style.color = response.ok && result.ok ? "#8de4bd" : "#ffcf7b";
+    if (!response.ok || !result.ok) {
+      $("connection").textContent = "● API sin verificar";
+      $("connection").style.color = "#ffcf7b";
+      return;
+    }
+    if (result.configured && (!result.configured.discord || !result.configured.database)) {
+      $("connection").textContent = "● Faltan credenciales";
+      $("connection").style.color = "#ffb2b9";
+    } else if (result.commands_registered) {
+      $("connection").textContent = "● API y comandos listos";
+      $("connection").style.color = "#8de4bd";
+    } else {
+      $("connection").textContent = "● API activa · comandos pendientes";
+      $("connection").style.color = "#ffcf7b";
+    }
   } catch {
     $("connection").textContent = "● Sin conexión con la API";
     $("connection").style.color = "#ffb2b9";
