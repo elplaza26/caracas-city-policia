@@ -250,7 +250,7 @@ $("loginForm").addEventListener("submit", async event => {
 $("loginCode").addEventListener("input", event => { event.target.value = event.target.value.toUpperCase().replace(/[^A-HJ-NP-Z2-9]/g, "").slice(0,10); });
 $("refreshButton").addEventListener("click", loadApplications);
 $("logoutButton").addEventListener("click", () => { showLogin(); $("loginError").textContent = ""; showToast("Sesión cerrada."); });
-$("search").addEventListener("input", renderApplications());
+$("search").addEventListener("input", () => renderApplications());
 
 async function checkConnection() {
   try {
