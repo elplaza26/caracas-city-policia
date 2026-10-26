@@ -1,20 +1,24 @@
 # PRIME POLICE · Panel administrativo
 
-Panel web para revisar las postulaciones de PRIME POLICE. La interfaz muestra las candidaturas pendientes, aceptadas y rechazadas en secciones separadas.
+Panel web para que el personal autorizado revise las postulaciones pendientes, aceptadas y rechazadas.
 
 ## Componentes
 
-- `index.html`: interfaz administrativa adaptada a PRIME POLICE.
-- Supabase Edge Function `prime-police-panel`: acceso temporal, lectura de solicitudes y decisiones.
-- Supabase Edge Function `prime-police-discord`: comandos e interacciones del bot.
-- `supabase/migrations/20261026160000_prime_police_application_answers.sql`: campo JSON para guardar las respuestas del formulario.
+- `index.html`: interfaz del panel administrativo.
+- Edge Function de Supabase `prime-police-panel`: acceso temporal, lectura de solicitudes y registro de decisiones.
+- Edge Function de Supabase `prime-police-discord`: comandos e interacciones del bot.
+- `supabase/migrations/20261026160000_prime_police_application_answers.sql`: añade el campo JSON de respuestas a las solicitudes.
 
 ## Publicación web
 
-- URL del panel: https://elplaza26.github.io/PRIME-POLICE/
-- GitHub Pages se publica mediante el workflow `.github/workflows/pages.yml`.
-2. Configurar la **Public Key** de la aplicación Discord como `DISCORD_PUBLIC_KEY` en los secretos de la función Supabase (o añadirla al código del endpoint).
-3. Confirmar que la URL de interacciones en Discord Developer Portal apunta a `https://ngkmylqsdeevdtrjrgfn.supabase.co/functions/v1/prime-police-discord`.
-4. Verificar que el bot tiene permiso para enviar mensajes y que su rol está por encima del rol de Policía para poder asignarlo al aceptar.
+- Panel: https://elplaza26.github.io/PRIME-POLICE/
+- GitHub Pages debe tener el origen de publicación configurado como **GitHub Actions**.
+- El workflow `.github/workflows/pages.yml` publica el contenido del repositorio al enviar cambios a `main` o al ejecutarlo manualmente.
 
-No publiques nunca el `DISCORD_BOT_TOKEN` en GitHub ni en el navegador.
+## Configuración de Discord
+
+1. Guarda `DISCORD_PUBLIC_KEY` y `DISCORD_BOT_TOKEN` en la configuración de la Edge Function de Supabase.
+2. Configura en Discord Developer Portal la URL de interacciones: `https://ngkmylqsdeevdtrjrgfn.supabase.co/functions/v1/prime-police-discord`.
+3. Comprueba que el bot puede enviar mensajes y que su rol está por encima del rol de Policía para asignarlo al aceptar una candidatura.
+
+No publiques `DISCORD_BOT_TOKEN` en GitHub ni en el navegador.
