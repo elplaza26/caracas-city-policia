@@ -2,7 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const GUILD_ID = "1539970134469378068";
 const POLICE_ROLE_ID = "1539970134482092038";
-const APPLICATION_CHANNEL_ID = "1539970135731871759";
+const APPLICATION_CHANNEL_ID = "1539970136683847857";
 const APPLICATION_ID = "1540484542354428025";
 const ADMIN_IDS = new Set(["698630509143654541"]);
 const MANAGER_ROLE_IDS = new Set(["1539970134565982313", "1539970134544748562", "1539970134544748556", "1539970134519578773", "1539970134519578774"]);
@@ -37,10 +37,8 @@ async function handle(i:any){
   const name=i.data?.name;
   if(name==="publicar_postulaciones"){
    if(!canManage(i,userId))return ephemeral("No tienes permiso para publicar las postulaciones.");
-   const channel=String(i.channel_id||"");
-   if(!channel)return ephemeral("No se pudo identificar este canal.");
-   await discord("/channels/"+channel+"/messages",{method:"POST",body:JSON.stringify({embeds:[{title:"👮 PRIME POLICE · Postulaciones abiertas",description:"¿Quieres formar parte del cuerpo policial? Pulsa el botón para completar la postulación. Responde con sinceridad y revisa la normativa de PRIME POLICE antes de enviar.",color:14264415,footer:{text:"PRIME POLICE · Reclutamiento"} }],components:[{type:1,components:[{type:2,style:1,label:"Presentar postulación",custom_id:"prime_apply"}]}]})});
-   return ephemeral("Mensaje de postulaciones publicado en este canal.");
+   await discord("/channels/"+APPLICATION_CHANNEL_ID+"/messages",{method:"POST",body:JSON.stringify({embeds:[{title:"👮 PRIME POLICE · Postulaciones abiertas",description:"¿Quieres formar parte del cuerpo policial? Pulsa el botón para completar la postulación. Responde con sinceridad y revisa la normativa de PRIME POLICE antes de enviar. Cada persona dispone de un máximo de **3 intentos**.",color:14264415,footer:{text:"PRIME POLICE · Reclutamiento"}}],components:[{type:1,components:[{type:2,style:1,label:"Presentar postulación",custom_id:"prime_apply"}]}]})});
+   return ephemeral("Formulario publicado en <#"+APPLICATION_CHANNEL_ID+">.");
   }
   if(name==="postulacion")return ephemeral("Para postularte a PRIME POLICE, busca el mensaje de reclutamiento y pulsa **Presentar postulación**. Si no aparece, avisa a un administrador.");
   if(name==="panel_codigo"){
@@ -60,11 +58,14 @@ async function handle(i:any){
   const a=values(i);const personal=a.personal||"";
   if(!personal||!a.experience_time||!a.goal_preference||!a.expectations_why||!a.rules_accepted)return ephemeral("Completa todos los apartados antes de enviar.");
   const answer={personal,experience_time:a.experience_time,goal_preference:a.goal_preference,expectations_why:a.expectations_why,rules_accepted:a.rules_accepted};
-  const rows=await db("police_applications",{method:"POST",body:JSON.stringify({discord_user_id:userId,discord_username:username,full_name:personal.slice(0,200),age:null,previous_experience:a.experience_time,motivation:a.expectations_why,availability:"",answers:answer,status:"pending",discord_guild_id:GUILD_ID})});
-  const app=rows?.[0];
-  const embed={title:"📋 Nueva postulación · PRIME POLICE",description:"**Solicitante:** <@"+userId+">\n**Nombre / datos IC-OOC:**\n"+personal.slice(0,1000)+"\n\n**Experiencia y tiempo en RP:**\n"+a.experience_time.slice(0,1000)+"\n\n**Meta y preferencia:**\n"+a.goal_preference.slice(0,1000)+"\n\n**Expectativas y motivación:**\n"+a.expectations_why.slice(0,1000)+"\n\n**Acepta normativa PRIME POLICE:** "+a.rules_accepted,color:14264415,footer:{text:"ID: "+String(app?.id||"registrada")+" · Revisar desde el panel web"}};
-  await discord("/channels/"+APPLICATION_CHANNEL_ID+"/messages",{method:"POST",body:JSON.stringify({embeds:[embed]})});
-  return ephemeral("Tu postulación ha sido enviada correctamente. El equipo de PRIME POLICE la revisará.");
+  const submitted=await db("rpc/submit_police_application",{method:"POST",body:JSON.stringify({p_discord_user_id:userId,p_discord_username:username,p_full_name:personal.slice(0,200),p_previous_experience:a.experience_time,p_motivation:a.expectations_why,p_answers:answer})});
+  if(!submitted?.ok)return ephemeral(String(submitted?.message||"No se pudo aceptar la postulación."));
+  const app=submitted.application;
+
+  const embed={title:"📋 Nueva postulación · PRIME POLICE",description:"**Solicitante:** <@"+userId+">\n**Intento:** "+submitted.attempt_number+" de 3",fields:[{name:"Datos IC / OOC",value:personal.slice(0,1000)},{name:"Experiencia y tiempo en RP",value:a.experience_time.slice(0,1000)},{name:"Meta y preferencia",value:a.goal_preference.slice(0,1000)},{name:"Expectativas y motivación",value:a.expectations_why.slice(0,1000)},{name:"Acepta la normativa",value:a.rules_accepted.slice(0,1000)}],color:14264415,footer:{text:"ID: "+String(app.id)+" · Intento "+submitted.attempt_number+"/3 · Revisar desde el panel web"}};
+  try{const posted=await discord("/channels/"+APPLICATION_CHANNEL_ID+"/messages",{method:"POST",body:JSON.stringify({embeds:[embed]})}) as any;if(posted?.id)await db("police_applications?id=eq."+encodeURIComponent(String(app.id)),{method:"PATCH",body:JSON.stringify({discord_message_id:String(posted.id)})});}
+  catch(error){console.error("Could not publish application intake message:",String(error));return ephemeral("Tu postulación quedó guardada, pero no se pudo publicar el aviso en el canal. Contacta con un administrador para confirmar su recepción.");}
+  return ephemeral("¡Postulación recibida! Este es tu intento "+submitted.attempt_number+" de 3. El equipo de PRIME POLICE la revisará y comunicará el resultado en el canal correspondiente.");
  }
  return ephemeral("Interacción no compatible.");
 }

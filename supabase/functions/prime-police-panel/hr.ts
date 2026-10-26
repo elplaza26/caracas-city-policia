@@ -78,7 +78,7 @@ async function allowed(req: Request) {
 }async function listPersonnel(req: Request) {
   const auth = await allowed(req); if (auth.error) return auth.error;
   try {
-    const records = await db("police_personnel?select=discord_user_id,discord_username,full_name,plate,rank_name,rank_role_id,status,source_application_id,created_at,updated_at,last_rank_change_at&order=full_name.asc&limit=500");
+    const records = await db("police_personnel?select=discord_user_id,discord_username,full_name,name_ooc,plate,unit,rank_name,rank_role_id,status,source_application_id,created_at,updated_at,last_rank_change_at&order=full_name.asc&limit=500");
     const apps = await db("police_applications?select=id,discord_user_id,discord_username,full_name,created_at,role_assigned_at&status=eq.accepted&order=created_at.desc&limit=500");
     const byId = new Map<string, any>();
     for (const person of records ?? []) byId.set(String(person.discord_user_id), person);
@@ -86,7 +86,7 @@ async function allowed(req: Request) {
       const id = String(app.discord_user_id ?? "");
       if (!validDiscordId(id)) continue;
       const known = byId.get(id);
-      if (!known) byId.set(id, { discord_user_id: id, discord_username: app.discord_username ?? "", full_name: app.full_name ?? "", plate: "", rank_name: "", rank_role_id: null, status: "active", source_application_id: app.id, created_at: app.created_at, updated_at: app.role_assigned_at ?? app.created_at, last_rank_change_at: null });
+      if (!known) byId.set(id, { discord_user_id: id, discord_username: app.discord_username ?? "", full_name: app.full_name ?? "", name_ooc: app.discord_username ?? "", plate: "", unit: "UCOP", rank_name: "", rank_role_id: null, status: "active", source_application_id: app.id, created_at: app.created_at, updated_at: app.role_assigned_at ?? app.created_at, last_rank_change_at: null });
       else if (!known.full_name && app.full_name) known.full_name = app.full_name;
     }
     return json({ ok: true, personnel: Array.from(byId.values()).sort((a, b) => String(a.full_name || a.discord_username).localeCompare(String(b.full_name || b.discord_username), "es")) });
@@ -97,20 +97,44 @@ async function registerPersonnel(req: Request) {
   const auth = await allowed(req); if (auth.error) return auth.error;
   let body: any; try { body = await req.json(); } catch { return json({ error: "Solicitud inválida." }, 400); }
   const id = String(body?.discord_user_id ?? "").trim();
-  const fullName = String(body?.full_name ?? "").trim().slice(0, 100);
+  const nameIc = String(body?.full_name ?? "").trim().slice(0, 100);
+  const nameOoc = String(body?.name_ooc ?? "").trim().slice(0, 100);
   const plate = String(body?.plate ?? "").trim().slice(0, 30);
-  if (!validDiscordId(id)) return json({ error: "Indica un ID de Discord válido." }, 400);
+  const rankRoleId = String(body?.rank_role_id ?? "").trim();
+  if (!validDiscordId(id) || !validDiscordId(rankRoleId) || !nameIc || !nameOoc || !plate) return json({ error: "Completa placa, nombre IC, nombre OOC, Discord y rango." }, 400);
+  let member: any; let oldRoles: string[] = []; let addedTargetRole = false;
   try {
-    const member = await discord("/guilds/" + GUILD_ID + "/members/" + enc(id)) as any;
-    if (!(member.roles ?? []).includes(POLICE_ROLE_ID)) return json({ error: "El usuario debe tener el rol de Policía para registrarlo." }, 409);
+    const [guildMember, profiles, configuredRanks] = await Promise.all([
+      discord("/guilds/" + GUILD_ID + "/members/" + enc(id)),
+      db("police_personnel?select=discord_user_id,rank_name,rank_role_id,source_application_id,created_at&discord_user_id=eq." + enc(id) + "&limit=1"),
+      db("police_rank_roles?select=role_id,role_name&order=rank_order.asc"),
+    ]);
+    member = guildMember as any;
+    const rank = (configuredRanks ?? []).find((item: any) => item.role_id === rankRoleId);
+    if (!rank) return json({ error: "Configura primero la escala y elige un rango de UCOP válido." }, 400);
+    const memberRoles: string[] = member.roles ?? [];
+    if (!memberRoles.includes(POLICE_ROLE_ID)) return json({ error: "El agente debe tener el rol base de Policía para registrarlo." }, 409);
+    if (memberRoles.includes(EXPELLED_ROLE_ID)) return json({ error: "No se puede registrar a una persona con el rol de expulsado." }, 409);
+    oldRoles = (configuredRanks ?? []).filter((item: any) => memberRoles.includes(String(item.role_id)) && item.role_id !== rankRoleId).map((item: any) => String(item.role_id));
+    const existing = profiles?.[0] ?? {};
+    if (!memberRoles.includes(rankRoleId)) { await discord("/guilds/" + GUILD_ID + "/members/" + enc(id) + "/roles/" + rankRoleId, { method: "PUT", body: "{}" }); addedTargetRole = true; }
+    for (const roleId of oldRoles) await discord("/guilds/" + GUILD_ID + "/members/" + enc(id) + "/roles/" + roleId, { method: "DELETE" });
     const username = String(member.user?.global_name || member.user?.username || id);
-    const existing = await db("police_personnel?select=discord_user_id,rank_name,rank_role_id,source_application_id,created_at&discord_user_id=eq." + enc(id) + "&limit=1");
-    const previous = existing?.[0] ?? {};
-    const rows = await db("police_personnel?on_conflict=discord_user_id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=representation" }, body: JSON.stringify({ discord_user_id: id, discord_username: username, full_name: fullName || previous.full_name || username, plate: plate || previous.plate || "", rank_name: previous.rank_name || "", rank_role_id: previous.rank_role_id || null, source_application_id: previous.source_application_id || null, status: "active", updated_at: new Date().toISOString() }) });
+    const now = new Date().toISOString();
+    const rows = await db("police_personnel?on_conflict=discord_user_id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=representation" }, body: JSON.stringify({ discord_user_id: id, discord_username: username, full_name: nameIc, name_ooc: nameOoc, plate, unit: "UCOP", rank_name: String(rank.role_name), rank_role_id: rankRoleId, source_application_id: existing.source_application_id ?? null, status: "active", updated_at: now, last_rank_change_at: now }) });
     return json({ ok: true, personnel: rows?.[0] ?? null });
-  } catch (error) { console.error("Personnel register error:", String(error)); return json({ error: "No se pudo registrar el oficial. Comprueba que siga en el servidor." }, 502); }
+  } catch (error) {
+    console.error("Personnel register error:", String(error));
+    try {
+      if (addedTargetRole) await discord("/guilds/" + GUILD_ID + "/members/" + enc(id) + "/roles/" + rankRoleId, { method: "DELETE" });
+      for (const roleId of oldRoles) await discord("/guilds/" + GUILD_ID + "/members/" + enc(id) + "/roles/" + roleId, { method: "PUT", body: "{}" });
+    } catch (rollbackError) { console.error("Personnel registration rollback failed:", String(rollbackError)); }
+    const message = String(error);
+    if (message.includes("Discord API 403") || message.includes("50013")) return json({ error: "Discord denegó el cambio de rango. Comprueba que el bot pueda administrar roles y que su rol esté por encima del rango." }, 502);
+    if (message.includes("Discord API 404") || message.includes("10007")) return json({ error: "No se encontró al usuario en el servidor." }, 404);
+    return json({ error: "No se pudo registrar al agente. Comprueba los datos y permisos." }, 502);
+  }
 }
-
 async function rankConfig(req: Request) {
   const auth = await allowed(req); if (auth.error) return auth.error;
   try {

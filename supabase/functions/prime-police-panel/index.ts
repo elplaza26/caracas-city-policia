@@ -2,7 +2,8 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { handleHr } from "./hr.ts";
 
 const GUILD_ID = "1539970134469378068";
-const NOTIFY_CHANNEL_ID = "1539970135731871759";
+const APPLICATION_CHANNEL_ID = "1539970136683847857";
+const RESULTS_CHANNEL_ID = "1564350390294552696";
 const POLICE_ROLE_ID = "1539970134482092038";
 const APPLICATION_ID = "1540484542354428025";
 const OWNER_IDS = new Set(["698630509143654541"]);
@@ -163,7 +164,7 @@ async function listApplications(req: Request) {
   if (!userId) return json({ error: "Sesión caducada o sin permisos de gestión." }, 403);
   try {
     const applications = await db(
-      "police_applications?select=id,discord_user_id,discord_username,full_name,age,previous_experience,motivation,availability,status,decision_reason,reviewed_by_name,created_at,reviewed_at,role_assigned_at,discord_message_id,answers&order=created_at.desc&limit=100",
+      "police_applications?select=id,discord_user_id,discord_username,full_name,age,previous_experience,motivation,availability,status,decision_reason,reviewed_by_name,created_at,reviewed_at,role_assigned_at,discord_message_id,attempt_number,answers&order=created_at.desc&limit=100",
     );
     return json({ ok: true, applications: applications ?? [] });
   } catch (e) {
@@ -173,11 +174,12 @@ async function listApplications(req: Request) {
 }
 
 async function findApplicationMessage(applicationId: string): Promise<any | null> {
-  const messages = await discord("/channels/" + NOTIFY_CHANNEL_ID + "/messages?limit=100") as any[];
+  const messages = await discord("/channels/" + APPLICATION_CHANNEL_ID + "/messages?limit=100") as any[];
   const target = (messages ?? []).find((message: any) => {
     const id = String(applicationId);
     if (String(message.content ?? "").includes(id)) return true;
     if ((message.embeds ?? []).some((embed: any) =>
+      String(embed.description ?? "").includes(id) || String(embed.footer?.text ?? "").includes(id) ||
       (embed.fields ?? []).some((field: any) => String(field.value ?? "").includes(id))
     )) return true;
     return (message.components ?? []).some((row: any) =>
@@ -212,6 +214,7 @@ async function decide(req: Request) {
     if (!app) return json({ error: "No se encontró esa candidatura." }, 404);
 
     const retryRole = action === "accept" && app.status === "accepted" && !app.role_assigned_at;
+    const isNewDecision = app.status === "pending";
     if (action === "reject" && app.status !== "pending") {
       return json({ error: "Esta candidatura ya fue revisada y no se ha cambiado." }, 409);
     }
@@ -284,14 +287,13 @@ async function decide(req: Request) {
     return json({ error: "No se pudo guardar la decisión en la base de datos." }, 500);
   }
 
-  const statusText = action === "accept" ? "✅ Aceptada · rol de Policía asignado" : "❌ Rechazada";
-  const content = "📋 **Preinscripción policial revisada**\n" +
-    "**Candidato:** " + String(app.full_name ?? "Sin nombre") + "\n" +
-    "**Discord:** <@" + String(app.discord_user_id) + ">\n" +
+  const statusText = action === "accept" ? "✅ Aceptada · rol de Policía asignado" : "❌ No seleccionada";
+  const content = "📋 **Postulación revisada**\n" +
+    "**Candidato:** <@" + String(app.discord_user_id) + ">\n" +
     "**Estado:** " + statusText + "\n" +
-    "**Revisado por:** <@" + reviewerId + ">" +
-    (reason ? "\n**Motivo:** " + reason : "") +
-    "\n**Solicitud:** " + id;
+    "**Revisado por:** <@" + reviewerId + ">\n" +
+    "**Intento:** " + String(app.attempt_number ?? 1) + "/3\n" +
+    "**Solicitud:** " + id;
   let discordSynced = false;
   let messageId = String(app.discord_message_id ?? "");
 
@@ -299,7 +301,7 @@ async function decide(req: Request) {
   if (messageId) {
     try {
       await discord(
-        "/channels/" + NOTIFY_CHANNEL_ID + "/messages/" + encodeURIComponent(messageId),
+        "/channels/" + APPLICATION_CHANNEL_ID + "/messages/" + encodeURIComponent(messageId),
         { method: "PATCH", body: JSON.stringify({ content, embeds: [], components: [] }) },
       );
       discordSynced = true;
@@ -316,7 +318,7 @@ async function decide(req: Request) {
       const existingMessage = await findApplicationMessage(id);
       if (existingMessage?.id) {
         await discord(
-          "/channels/" + NOTIFY_CHANNEL_ID + "/messages/" + encodeURIComponent(existingMessage.id),
+          "/channels/" + APPLICATION_CHANNEL_ID + "/messages/" + encodeURIComponent(existingMessage.id),
           { method: "PATCH", body: JSON.stringify({ content, embeds: [], components: [] }) },
         );
         messageId = String(existingMessage.id);
@@ -330,7 +332,7 @@ async function decide(req: Request) {
   // If the original is no longer available, publish a decision receipt instead.
   if (!discordSynced) {
     try {
-      const posted = await discord("/channels/" + NOTIFY_CHANNEL_ID + "/messages", {
+      const posted = await discord("/channels/" + APPLICATION_CHANNEL_ID + "/messages", {
         method: "POST",
         body: JSON.stringify({ content }),
       }) as any;
@@ -355,12 +357,37 @@ async function decide(req: Request) {
     }
   }
 
+  let resultsNotified = !isNewDecision;
+  if (isNewDecision) {
+    const attempt = Math.max(1, Number(app.attempt_number) || 1);
+    const remaining = Math.max(0, 3 - attempt);
+    const accepted = action === "accept";
+    const description = accepted
+      ? "¡Enhorabuena! Tu postulación ha sido aceptada. Ya tienes el rol <@&" + POLICE_ROLE_ID + ">. Te damos la bienvenida a PRIME POLICE; el equipo te indicará los siguientes pasos."
+      : remaining > 0
+        ? "Gracias por tu tiempo y por querer formar parte de PRIME POLICE. En esta ocasión no has sido seleccionado. No te desanimes: puedes prepararte y volver a intentarlo. Te quedan **" + remaining + " de 3 intentos**."
+        : "Gracias por tu esfuerzo y por postularte a PRIME POLICE. En esta ocasión no has sido seleccionado. Has utilizado tus **3 de 3 intentos**, así que no podrás enviar otra postulación. Te animamos a seguir participando en la comunidad y te deseamos lo mejor.";
+    try {
+      await discord("/channels/" + RESULTS_CHANNEL_ID + "/messages", {
+        method: "POST",
+        body: JSON.stringify({
+          content: "<@" + String(app.discord_user_id) + ">",
+          embeds: [{ title: accepted ? "🎉 Resultado de postulación · Aceptada" : "📋 Resultado de postulación · PRIME POLICE", description, color: accepted ? 0x45b879 : 0xd5ad5a, footer: { text: "PRIME POLICE · Reclutamiento · Intento " + attempt + "/3" } }],
+          allowed_mentions: { parse: [], users: [String(app.discord_user_id)], roles: accepted ? [POLICE_ROLE_ID] : [] },
+        }),
+      });
+      resultsNotified = true;
+    } catch (error) {
+      console.error("Could not publish application result:", String(error));
+    }
+  }
   return json({
     ok: true,
     status: finalApp.status,
     role_assigned: action === "accept" && Boolean(finalApp.role_assigned_at),
     discord_synced: discordSynced,
-    warning: discordSynced ? undefined : "La decisión se guardó, pero Discord no confirmó la actualización del mensaje.",
+    results_notified: resultsNotified,
+    warning: discordSynced && resultsNotified ? undefined : "La decisión se guardó, pero Discord no confirmó todos los mensajes.",
   });
 }
 
