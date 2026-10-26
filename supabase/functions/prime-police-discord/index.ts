@@ -3,6 +3,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 const GUILD_ID = "1539970134469378068";
 const POLICE_ROLE_ID = "1539970134482092038";
 const APPLICATION_CHANNEL_ID = "1539970136683847857";
+const APPLICATION_ANNOUNCEMENTS_CHANNEL_ID = "1539970135375478860";
 const APPLICATION_ID = "1540484542354428025";
 const ADMIN_IDS = new Set(["698630509143654541"]);
 const MANAGER_ROLE_IDS = new Set(["1539970134565982313", "1539970134544748562", "1539970134544748556", "1539970134519578773", "1539970134519578774"]);
@@ -37,8 +38,8 @@ async function handle(i:any){
   const name=i.data?.name;
   if(name==="publicar_postulaciones"){
    if(!canManage(i,userId))return ephemeral("No tienes permiso para publicar las postulaciones.");
-   await discord("/channels/"+APPLICATION_CHANNEL_ID+"/messages",{method:"POST",body:JSON.stringify({embeds:[{title:"👮 PRIME POLICE · Postulaciones abiertas",description:"¿Quieres formar parte del cuerpo policial? Pulsa el botón para completar la postulación. Responde con sinceridad y revisa la normativa de PRIME POLICE antes de enviar. Cada persona dispone de un máximo de **3 intentos**.",color:14264415,footer:{text:"PRIME POLICE · Reclutamiento"}}],components:[{type:1,components:[{type:2,style:1,label:"Presentar postulación",custom_id:"prime_apply"}]}]})});
-   return ephemeral("Formulario publicado en <#"+APPLICATION_CHANNEL_ID+">.");
+   await discord("/channels/"+APPLICATION_ANNOUNCEMENTS_CHANNEL_ID+"/messages",{method:"POST",body:JSON.stringify({embeds:[{title:"👮 PRIME POLICE · Postulaciones abiertas",description:"¿Quieres formar parte del cuerpo policial? Pulsa el botón para completar la postulación. Responde con sinceridad y revisa la normativa de PRIME POLICE antes de enviar. Cada persona dispone de un máximo de **3 intentos**.",color:14264415,footer:{text:"PRIME POLICE · Reclutamiento"}}],components:[{type:1,components:[{type:2,style:1,label:"Presentar postulación",custom_id:"prime_apply"}]}]})});
+   return ephemeral("Formulario publicado en <#"+APPLICATION_ANNOUNCEMENTS_CHANNEL_ID+">.");
   }
   if(name==="postulacion")return ephemeral("Para postularte a PRIME POLICE, busca el mensaje de reclutamiento y pulsa **Presentar postulación**. Si no aparece, avisa a un administrador.");
   if(name==="panel_codigo"){
