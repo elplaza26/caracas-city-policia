@@ -1,4 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { handleHr } from "./hr.ts";
 
 const GUILD_ID = "1539970134469378068";
 const NOTIFY_CHANNEL_ID = "1539970135731871759";
@@ -273,6 +274,11 @@ async function decide(req: Request) {
       return json({ error: "La candidatura cambió durante la operación. Actualiza la lista antes de volver a intentarlo." }, 409);
     }
     finalApp = updated[0];
+    if (action === "accept") {
+      try {
+        await db("police_personnel?on_conflict=discord_user_id", { method: "POST", headers: { Prefer: "resolution=ignore-duplicates,return=minimal" }, body: JSON.stringify({ discord_user_id: String(app.discord_user_id), discord_username: String(app.discord_username ?? ""), full_name: String(app.full_name ?? ""), source_application_id: app.id, status: "active" }) });
+      } catch (e) { console.error("Personnel record creation failed:", String(e)); }
+    }
   } catch (e) {
     console.error("Panel decision database error:", String(e));
     return json({ error: "No se pudo guardar la decisión en la base de datos." }, 500);
@@ -366,6 +372,8 @@ Deno.serve(async (req: Request) => {
   if (action === "decision" && req.method === "POST") return await decide(req);
   if (action === "sanctions" && req.method === "GET") return await listSanctions(req);
   if (action === "sanction" && req.method === "POST") return await createSanction(req);
+  const hrResponse = await handleHr(req, action ?? "");
+  if (hrResponse) return hrResponse;
   if (action) return json({ error: "Acción de panel no reconocida." }, 404);
   if (req.method === "GET") {
     let commandsRegistered = false;
