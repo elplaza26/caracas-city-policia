@@ -159,7 +159,6 @@ function renderApplications() {
     const grid = document.createElement("div");
     grid.className = "details";
     const a = app.answers || {};
-    const a = app.answers || {};
     grid.append(
       detail("Fecha de solicitud", niceDate(app.created_at)),
       detail("Datos IC / OOC / edad / Discord", a.personal || app.full_name),
