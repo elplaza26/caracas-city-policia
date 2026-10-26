@@ -11,7 +11,7 @@ Panel web para revisar las postulaciones de PRIME POLICE. La interfaz muestra la
 
 ## Publicación web
 
-- URL del panel: https://elplaza26.github.io/PRIME-POLICE/
+- URL del panel: https://primepolicerp.github.io/PRIME-POLICE/
 - GitHub Pages se publica mediante el workflow `.github/workflows/pages.yml`.
 2. Configurar la **Public Key** de la aplicación Discord como `DISCORD_PUBLIC_KEY` en los secretos de la función Supabase (o añadirla al código del endpoint).
 3. Confirmar que la URL de interacciones en Discord Developer Portal apunta a `https://ngkmylqsdeevdtrjrgfn.supabase.co/functions/v1/prime-police-discord`.
