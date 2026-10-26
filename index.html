@@ -128,16 +128,18 @@ function renderApplications() {
   const list = $("candidateList");
   list.replaceChildren();
   const q = $("search").value.trim().toLocaleLowerCase("es");
-  const visible = applications.filter(app => [
-    app.full_name, app.discord_username, app.discord_user_id, app.status
+  const visible = applications.filter(app => app.status === activeStatus && [
+    app.full_name, app.discord_username, app.discord_user_id, JSON.stringify(app.answers || {})
   ].join(" ").toLocaleLowerCase("es").includes(q));
+  $("listTitle").textContent = activeStatus === "pending" ? "Postulaciones pendientes" : activeStatus === "accepted" ? "Postulaciones aceptadas" : "Postulaciones rechazadas";
+  document.querySelectorAll(".tab").forEach(b => b.classList.toggle("active", b.dataset.status === activeStatus));
   $("countPending").textContent = applications.filter(a => a.status === "pending").length;
   $("countAccepted").textContent = applications.filter(a => a.status === "accepted").length;
   $("countRejected").textContent = applications.filter(a => a.status === "rejected").length;
   if (!visible.length) {
     const empty = document.createElement("div");
     empty.className = "empty";
-    empty.textContent = applications.length ? "No hay candidaturas que coincidan con la búsqueda." : "Todavía no hay candidaturas registradas.";
+    empty.textContent = applications.some(a => a.status === activeStatus) ? "No hay resultados para esta búsqueda." : activeStatus === "pending" ? "No hay postulaciones pendientes." : activeStatus === "accepted" ? "Todavía no hay postulaciones aceptadas." : "Todavía no hay postulaciones rechazadas.";
     list.append(empty);
     return;
   }
