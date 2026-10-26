@@ -156,12 +156,20 @@ function renderApplications() {
     head.append(identity, badgeFor(app));
     const grid = document.createElement("div");
     grid.className = "details";
+    const a = app.answers || {};
     grid.append(
       detail("Fecha de solicitud", niceDate(app.created_at)),
-      detail("Edad", app.age),
-      detail("Disponibilidad", app.availability),
-      detail("Experiencia previa", app.previous_experience),
-      detail("Motivación", app.motivation),
+      detail("Nombre y apellido IC", a.ic_name || app.full_name),
+      detail("Nombre y apellido OOC", a.ooc_name),
+      detail("Edad OOC", a.ooc_age || app.age),
+      detail("Discord", a.discord || app.discord_username),
+      detail("Experiencia policial RP", a.experience || app.previous_experience),
+      detail("Tiempo en RolePlay", a.rp_time),
+      detail("Meta dentro de la Policía", a.goal),
+      detail("Preferencia (PVP / RolePlay)", a.preference),
+      detail("Qué espera de la Policía", a.expectations),
+      detail("Por qué quiere entrar", a.why_join || app.motivation),
+      detail("Acepta normativa de INNOVA RP", a.rules_accepted),
       detail("Motivo de decisión", app.decision_reason)
     );
     const actions = document.createElement("div");
