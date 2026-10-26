@@ -79,20 +79,24 @@ async function allowed(req: Request) {
   const auth = await allowed(req); if (auth.error) return auth.error;
   try {
     const records = await db("police_personnel?select=discord_user_id,discord_username,full_name,name_ooc,plate,unit,rank_name,rank_role_id,status,source_application_id,created_at,updated_at,last_rank_change_at&order=full_name.asc&limit=500");
-    const apps = await db("police_applications?select=id,discord_user_id,discord_username,full_name,created_at,role_assigned_at&status=eq.accepted&order=created_at.desc&limit=500");
-    const byId = new Map<string, any>();
-    for (const person of records ?? []) byId.set(String(person.discord_user_id), person);
-    for (const app of apps ?? []) {
-      const id = String(app.discord_user_id ?? "");
-      if (!validDiscordId(id)) continue;
-      const known = byId.get(id);
-      if (!known) byId.set(id, { discord_user_id: id, discord_username: app.discord_username ?? "", full_name: app.full_name ?? "", name_ooc: app.discord_username ?? "", plate: "", unit: "UCOP", rank_name: "", rank_role_id: null, status: "active", source_application_id: app.id, created_at: app.created_at, updated_at: app.role_assigned_at ?? app.created_at, last_rank_change_at: null });
-      else if (!known.full_name && app.full_name) known.full_name = app.full_name;
-    }
-    return json({ ok: true, personnel: Array.from(byId.values()).sort((a, b) => String(a.full_name || a.discord_username).localeCompare(String(b.full_name || b.discord_username), "es")) });
+    return json({ ok: true, personnel: records ?? [] });
   } catch (error) { console.error("Personnel list error:", String(error)); return json({ error: "No se pudo cargar la base de personal." }, 500); }
 }
 
+async function deletePersonnel(req: Request) {
+  const auth = await allowed(req); if (auth.error) return auth.error;
+  let body: any; try { body = await req.json(); } catch { return json({ error: "Solicitud inválida." }, 400); }
+  const id = String(body?.discord_user_id ?? "").trim();
+  if (!validDiscordId(id)) return json({ error: "El ID de Discord no es válido." }, 400);
+  try {
+    const removed = await db("police_personnel?discord_user_id=eq." + enc(id), { method: "DELETE" });
+    if (!Array.isArray(removed) || !removed.length) return json({ error: "Ese agente ya no aparece en el registro UCOP." }, 404);
+    return json({ ok: true, message: "Agente eliminado del registro de personal UCOP." });
+  } catch (error) {
+    console.error("Personnel deletion error:", String(error));
+    return json({ error: "No se pudo eliminar al agente del registro." }, 500);
+  }
+}
 async function registerPersonnel(req: Request) {
   const auth = await allowed(req); if (auth.error) return auth.error;
   let body: any; try { body = await req.json(); } catch { return json({ error: "Solicitud inválida." }, 400); }
@@ -263,6 +267,7 @@ async function changeRank(req: Request) {
 export async function handleHr(req: Request, action: string): Promise<Response | null> {
   if (action === "personnel" && req.method === "GET") return await listPersonnel(req);
   if (action === "personnel-register" && req.method === "POST") return await registerPersonnel(req);
+  if (action === "personnel-delete" && req.method === "POST") return await deletePersonnel(req);
   if (action === "rank-config" && req.method === "GET") return await rankConfig(req);
   if (action === "rank-config-save" && req.method === "POST") return await saveRankConfig(req);
   if (action === "rank-history" && req.method === "GET") return await rankHistory(req);
