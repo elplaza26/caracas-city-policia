@@ -2,11 +2,12 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const GUILD_ID = "1539970134469378068";
 const POLICE_ROLE_ID = "1539970134482092038";
+const CIC_ROLE_ID = "1539970134519578772";
 const EXPELLED_ROLE_ID = "1539970134482092034";
 const OWNER_IDS = new Set(["698630509143654541"]);
 const MANAGER_ROLE_IDS = new Set(["1539970134565982313", "1539970134544748562", "1539970134544748556", "1539970134519578773", "1539970134519578774"]);
 const PROTECTED_ROLE_IDS = new Set([
-  POLICE_ROLE_ID, EXPELLED_ROLE_ID,
+  POLICE_ROLE_ID, EXPELLED_ROLE_ID, CIC_ROLE_ID,
   "1539970134482092032", "1539970134469378077", "1539970134469378076",
   "1539970134469378075", "1539970134469378074", "1539970134469378073",
   ...MANAGER_ROLE_IDS,
@@ -107,11 +108,11 @@ async function registerPersonnel(req: Request) {
   const unit = String(body?.unit ?? "UCOP").trim().toUpperCase();
   const rankRoleId = String(body?.rank_role_id ?? "").trim();
   if (!validDiscordId(id) || !validDiscordId(rankRoleId) || !nameIc || !nameOoc || !plate || !["UCOP", "CIC"].includes(unit)) return json({ error: "Completa placa, nombre IC, nombre OOC, Discord, unidad UCOP/CIC y rango." }, 400);
-  let member: any; let oldRoles: string[] = []; let addedTargetRole = false;
+  let member: any; let oldRoles: string[] = []; let addedTargetRole = false; let addedUnitRole = false; let removedUnitRole = false;
   try {
     const [guildMember, profiles, configuredRanks] = await Promise.all([
       discord("/guilds/" + GUILD_ID + "/members/" + enc(id)),
-      db("police_personnel?select=discord_user_id,rank_name,rank_role_id,source_application_id,created_at&discord_user_id=eq." + enc(id) + "&limit=1"),
+      db("police_personnel?select=discord_user_id,rank_name,rank_role_id,unit,source_application_id,created_at&discord_user_id=eq." + enc(id) + "&limit=1"),
       db("police_rank_roles?select=role_id,role_name&order=rank_order.asc"),
     ]);
     member = guildMember as any;
@@ -123,6 +124,8 @@ async function registerPersonnel(req: Request) {
     oldRoles = (configuredRanks ?? []).filter((item: any) => memberRoles.includes(String(item.role_id)) && item.role_id !== rankRoleId).map((item: any) => String(item.role_id));
     const existing = profiles?.[0] ?? {};
     if (!memberRoles.includes(rankRoleId)) { await discord("/guilds/" + GUILD_ID + "/members/" + enc(id) + "/roles/" + rankRoleId, { method: "PUT", body: "{}" }); addedTargetRole = true; }
+    if (unit === "CIC" && !memberRoles.includes(CIC_ROLE_ID)) { await discord("/guilds/" + GUILD_ID + "/members/" + enc(id) + "/roles/" + CIC_ROLE_ID, { method: "PUT", body: "{}" }); addedUnitRole = true; }
+    if (unit === "UCOP" && existing.unit === "CIC" && memberRoles.includes(CIC_ROLE_ID)) { await discord("/guilds/" + GUILD_ID + "/members/" + enc(id) + "/roles/" + CIC_ROLE_ID, { method: "DELETE" }); removedUnitRole = true; }
     for (const roleId of oldRoles) await discord("/guilds/" + GUILD_ID + "/members/" + enc(id) + "/roles/" + roleId, { method: "DELETE" });
     const username = String(member.user?.global_name || member.user?.username || id);
     const now = new Date().toISOString();
@@ -132,6 +135,8 @@ async function registerPersonnel(req: Request) {
     console.error("Personnel register error:", String(error));
     try {
       if (addedTargetRole) await discord("/guilds/" + GUILD_ID + "/members/" + enc(id) + "/roles/" + rankRoleId, { method: "DELETE" });
+      if (addedUnitRole) await discord("/guilds/" + GUILD_ID + "/members/" + enc(id) + "/roles/" + CIC_ROLE_ID, { method: "DELETE" });
+      if (removedUnitRole) await discord("/guilds/" + GUILD_ID + "/members/" + enc(id) + "/roles/" + CIC_ROLE_ID, { method: "PUT", body: "{}" });
       for (const roleId of oldRoles) await discord("/guilds/" + GUILD_ID + "/members/" + enc(id) + "/roles/" + roleId, { method: "PUT", body: "{}" });
     } catch (rollbackError) { console.error("Personnel registration rollback failed:", String(rollbackError)); }
     const message = String(error);
