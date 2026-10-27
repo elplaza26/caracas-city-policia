@@ -6,7 +6,6 @@ const APPLICATION_CHANNEL_ID = "1539970136683847857";
 const RESULTS_CHANNEL_ID = "1564350390294552696";
 const POLICE_ROLE_ID = "1539970134482092038";
 const APPLICATION_ID = "1540484542354428025";
-const OWNER_IDS = new Set(["698630509143654541"]);
 const BOT_TOKEN = Deno.env.get("DISCORD_BOT_TOKEN") ?? "";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -143,7 +142,7 @@ async function login(req: Request) {
     );
     const row = rows?.[0];
     // El código solo lo emite prime-police-discord tras validar al usuario/rol de staff en Discord.
-    // No comprobar aquí ADMIN_IDS: los miembros autorizados por rol tienen su propio ID de usuario.
+    // El código solo inicia sesión; cada acción del panel vuelve a comprobar los roles gestores.
     if (!row) {
       return json({ error: "Código inválido, usado o caducado. Genera uno nuevo en Discord." }, 401);
     }
@@ -431,12 +430,11 @@ const WARNING_CHANNEL_ID = "1539970136512143482";
 const STRIKE_CHANNEL_ID = "1539970136512143481";
 const MANAGER_ROLE_IDS = new Set([
   "1539970134565982313", "1539970134544748562", "1539970134544748556",
-  "1539970134519578773", "1539970134519578774",
+  "1539970134544748557", "1539970134519578773", "1539970134519578774",
 ]);
 async function authorizedUser(req: Request): Promise<string | null> {
   const userId = await authenticate(req);
   if (!userId) return null;
-  if (OWNER_IDS.has(userId)) return userId;
   try {
     const member = await discord("/guilds/" + GUILD_ID + "/members/" + encodeURIComponent(userId)) as any;
     return (member.roles ?? []).some((role: string) => MANAGER_ROLE_IDS.has(role)) ? userId : null;
@@ -450,7 +448,10 @@ async function listSanctions(req: Request) {
   const userId = await authorizedUser(req);
   if (!userId) return json({ error: "No tienes un rol autorizado para gestionar sanciones." }, 403);
   try {
-    const rows = await db("police_sanctions?select=*&order=created_at.desc&limit=200");
+    const personnel = await db("police_personnel?select=discord_user_id&unit=eq.UCOP&limit=500");
+    const ids = (personnel ?? []).map((row: any) => String(row.discord_user_id)).filter((id: string) => /^\d{17,20}$/.test(id));
+    if (!ids.length) return json({ ok: true, sanctions: [] });
+    const rows = await db("police_sanctions?select=*&discord_user_id=in.(" + ids.join(",") + ")&order=created_at.desc&limit=200");
     return json({ ok: true, sanctions: rows ?? [] });
   } catch (e) {
     console.error("Sanctions list error:", String(e));
@@ -474,6 +475,8 @@ async function createSanction(req: Request) {
   let member: any;
   let inserted: any;
   try {
+    const ucopPersonnel = await db("police_personnel?select=discord_user_id&discord_user_id=eq." + targetId + "&unit=eq.UCOP&limit=1");
+    if (!ucopPersonnel?.length) return json({ error: "La persona no está registrada como personal UCOP." }, 409);
     member = await discord("/guilds/" + GUILD_ID + "/members/" + encodeURIComponent(targetId)) as any;
     const roles: string[] = member.roles ?? [];
     if (!roles.includes(POLICE_ROLE_ID)) return json({ error: "La persona no tiene el rol Policía." }, 409);

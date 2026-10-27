@@ -5,9 +5,8 @@ const POLICE_ROLE_ID = "1539970134482092038";
 const APPLICATION_CHANNEL_ID = "1539970136683847857";
 const APPLICATION_ANNOUNCEMENTS_CHANNEL_ID = "1539970135375478860";
 const APPLICATION_ID = "1540484542354428025";
-const ADMIN_IDS = new Set(["698630509143654541"]);
-const MANAGER_ROLE_IDS = new Set(["1539970134565982313", "1539970134544748562", "1539970134544748556", "1539970134519578773", "1539970134519578774"]);
-const canManage = (i:any, userId:string) => ADMIN_IDS.has(userId) || (i.member?.roles || []).some((role:string) => MANAGER_ROLE_IDS.has(role));
+const MANAGER_ROLE_IDS = new Set(["1539970134565982313", "1539970134544748562", "1539970134544748556", "1539970134544748557", "1539970134519578773", "1539970134519578774"]);
+const canManage = (i:any) => (i.member?.roles || []).some((role:string) => MANAGER_ROLE_IDS.has(role));
 const BOT_TOKEN = Deno.env.get("DISCORD_BOT_TOKEN") ?? "";
 const DISCORD_PUBLIC_KEY = "00d2404753364bae3875ef0fb6f98707e642a08405a1fb3b97bcd391bd183d57";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
@@ -43,7 +42,7 @@ async function handle(i:any){
  if(i.type===2){
   const name=i.data?.name;
   if(name==="publicar_postulaciones"){
-   if(!canManage(i,userId))return ephemeral("No tienes permiso para publicar las postulaciones.");
+   if(!canManage(i))return ephemeral("No tienes permiso para publicar las postulaciones.");
    EdgeRuntime.waitUntil((async()=>{
     try{
      await discord("/channels/"+APPLICATION_ANNOUNCEMENTS_CHANNEL_ID+"/messages",{method:"POST",body:JSON.stringify({embeds:[{title:"👮 PRIME POLICE · Postulaciones abiertas",description:"¿Quieres formar parte del cuerpo policial? Pulsa el botón para completar la postulación. Responde con sinceridad y revisa la normativa de PRIME POLICE antes de enviar. Cada persona dispone de un máximo de **3 intentos**.",color:14264415,footer:{text:"PRIME POLICE · Reclutamiento"}}],components:[{type:1,components:[{type:2,style:1,label:"Presentar postulación",custom_id:"prime_apply"}]}]})});
@@ -57,7 +56,7 @@ async function handle(i:any){
   }
   if(name==="postulacion")return ephemeral("Para postularte a PRIME POLICE, busca el mensaje de reclutamiento y pulsa **Presentar postulación**. Si no aparece, avisa a un administrador.");
   if(name==="panel_codigo"){
-   if(!canManage(i,userId))return ephemeral("No tienes permiso para acceder al panel administrativo.");
+   if(!canManage(i))return ephemeral("No tienes permiso para acceder al panel administrativo.");
    const alphabet="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";let code="";const random=new Uint8Array(10);crypto.getRandomValues(random);for(const n of random)code+=alphabet[n%alphabet.length];
    const digest=new Uint8Array(await crypto.subtle.digest("SHA-256",encoder.encode(code)));const hash=Array.from(digest,b=>b.toString(16).padStart(2,"0")).join("");
    await db("police_panel_login_codes",{method:"POST",body:JSON.stringify({code_hash:hash,discord_user_id:userId,expires_at:new Date(Date.now()+5*60*1000).toISOString()})});
