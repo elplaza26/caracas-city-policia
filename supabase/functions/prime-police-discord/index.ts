@@ -22,6 +22,12 @@ async function db(path:string,init:RequestInit={}){if(!SUPABASE_URL||!SERVICE_KE
 async function discord(path:string,init:RequestInit={}){if(!BOT_TOKEN)throw Error("Discord bot token missing");const r=await fetch("https://discord.com/api/v10"+path,{...init,headers:{Authorization:"Bot "+BOT_TOKEN,"Content-Type":"application/json",...(init.headers||{})}});const text=await r.text();let body:any;try{body=text?JSON.parse(text):null}catch{body=text}if(!r.ok)throw Error("Discord "+r.status+" "+JSON.stringify(body));return body}
 const response=(type:number,data:any)=>json({type,data});
 const ephemeral=(content:string)=>response(4,{content,flags:64});
+async function editInteractionReply(interaction:any,content:string){
+ const token=String(interaction.token||"");
+ if(!token)throw Error("Discord interaction token missing");
+ const r=await fetch("https://discord.com/api/v10/webhooks/"+APPLICATION_ID+"/"+encodeURIComponent(token)+"/messages/@original",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({content})});
+ if(!r.ok)throw Error("Discord interaction reply "+r.status);
+}
 const input=(id:string,label:string,placeholder:string,required=true,style=2)=>({type:4,custom_id:id,label,style,placeholder,min_length:1,max_length:style===1?100:1000,required});
 function modal(){return response(9,{custom_id:"prime_application_submit",title:"Postulación · PRIME POLICE",components:[
  {type:1,components:[input("character_info","Ficha del personaje (IC)","Nombre IC: nombre y apellidos | Edad IC: ... | Historial: limpio o antecedentes activos.")]},
@@ -38,8 +44,16 @@ async function handle(i:any){
   const name=i.data?.name;
   if(name==="publicar_postulaciones"){
    if(!canManage(i,userId))return ephemeral("No tienes permiso para publicar las postulaciones.");
-   await discord("/channels/"+APPLICATION_ANNOUNCEMENTS_CHANNEL_ID+"/messages",{method:"POST",body:JSON.stringify({embeds:[{title:"👮 PRIME POLICE · Postulaciones abiertas",description:"¿Quieres formar parte del cuerpo policial? Pulsa el botón para completar la postulación. Responde con sinceridad y revisa la normativa de PRIME POLICE antes de enviar. Cada persona dispone de un máximo de **3 intentos**.",color:14264415,footer:{text:"PRIME POLICE · Reclutamiento"}}],components:[{type:1,components:[{type:2,style:1,label:"Presentar postulación",custom_id:"prime_apply"}]}]})});
-   return ephemeral("Formulario publicado en <#"+APPLICATION_ANNOUNCEMENTS_CHANNEL_ID+">.");
+   EdgeRuntime.waitUntil((async()=>{
+    try{
+     await discord("/channels/"+APPLICATION_ANNOUNCEMENTS_CHANNEL_ID+"/messages",{method:"POST",body:JSON.stringify({embeds:[{title:"👮 PRIME POLICE · Postulaciones abiertas",description:"¿Quieres formar parte del cuerpo policial? Pulsa el botón para completar la postulación. Responde con sinceridad y revisa la normativa de PRIME POLICE antes de enviar. Cada persona dispone de un máximo de **3 intentos**.",color:14264415,footer:{text:"PRIME POLICE · Reclutamiento"}}],components:[{type:1,components:[{type:2,style:1,label:"Presentar postulación",custom_id:"prime_apply"}]}]})});
+     await editInteractionReply(i,"Formulario publicado en <#"+APPLICATION_ANNOUNCEMENTS_CHANNEL_ID+">.");
+    }catch(error){
+     console.error("Could not publish application announcement:",String(error));
+     try{await editInteractionReply(i,"No se pudo publicar el formulario. Comprueba los permisos del bot y vuelve a intentarlo.");}catch(replyError){console.error("Could not update deferred interaction:",String(replyError));}
+    }
+   })());
+   return response(5,{data:{flags:64}});
   }
   if(name==="postulacion")return ephemeral("Para postularte a PRIME POLICE, busca el mensaje de reclutamiento y pulsa **Presentar postulación**. Si no aparece, avisa a un administrador.");
   if(name==="panel_codigo"){
