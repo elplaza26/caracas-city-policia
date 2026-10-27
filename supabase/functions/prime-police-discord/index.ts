@@ -24,12 +24,13 @@ async function db(path:string,init:RequestInit={}){if(!SUPABASE_URL||!SERVICE_KE
 async function discord(path:string,init:RequestInit={}){if(!BOT_TOKEN)throw Error("Discord bot token missing");const r=await fetch("https://discord.com/api/v10"+path,{...init,headers:{Authorization:"Bot "+BOT_TOKEN,"Content-Type":"application/json",...(init.headers||{})}});const text=await r.text();let body:any;try{body=text?JSON.parse(text):null}catch{body=text}if(!r.ok)throw Error("Discord "+r.status+" "+JSON.stringify(body));return body}
 const response=(type:number,data:any)=>json({type,data});
 const ephemeral=(content:string)=>response(4,{content,flags:64});
-async function editInteractionReply(interaction:any,content:string){
+async function editInteractionResponse(interaction:any,payload:any){
  const token=String(interaction.token||"");
  if(!token)throw Error("Discord interaction token missing");
- const r=await fetch("https://discord.com/api/v10/webhooks/"+APPLICATION_ID+"/"+encodeURIComponent(token)+"/messages/@original",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({content})});
+ const r=await fetch("https://discord.com/api/v10/webhooks/"+APPLICATION_ID+"/"+encodeURIComponent(token)+"/messages/@original",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
  if(!r.ok)throw Error("Discord interaction reply "+r.status);
 }
+async function editInteractionReply(interaction:any,content:string){return editInteractionResponse(interaction,{content})}
 async function publishOrUpdatePanel(channelId:string,customId:string,payload:any){
  const messages=await discord("/channels/"+channelId+"/messages?limit=100") as any[];
  const current=Array.isArray(messages)?messages.find((message:any)=>String(message.author?.id)===APPLICATION_ID&&(message.components||[]).some((row:any)=>(row.components||[]).some((component:any)=>component.custom_id===customId))):null;
@@ -72,10 +73,11 @@ async function processRankRequest(i:any,userId:string,username:string,a:any){
 }
 const input=(id:string,label:string,placeholder:string,required=true,style=2,maxLength=style===1?100:1000)=>({type:4,custom_id:id,label,style,...(placeholder?{placeholder}:{}),min_length:1,max_length:maxLength,required});
 function rankRequestModal(){return response(9,{custom_id:"prime_rank_request_submit",title:"Solicitar rango · UCOP",components:[
- {type:1,components:[input("character_name","Nombre del personaje","",true,1)]},
- {type:1,components:[input("plate","Número de placa","",true,1,30)]},
- {type:1,components:[input("requested_rank","Rango solicitado","Escribe el nombre del rango configurado en la web.",true,1)]},
- {type:1,components:[input("approved_by","Aprobado por (sin @)","Escribe el nombre, sin mencionar a nadie.",true,1)]}
+ {type:10,content:"⚠️ Este formulario se enviará a UCOP. No compartas contraseñas ni información confidencial. Tu usuario e ID de Discord se registran automáticamente."},
+ {type:18,label:"Nombre IC",component:input("character_name","Respuesta","Nombre de tu personaje.",true,1)},
+ {type:18,label:"Número de placa",component:input("plate","Respuesta","Número de placa policial.",true,1,30)},
+ {type:18,label:"Rango solicitado",description:"Debe coincidir con un rango configurado en la web UCOP.",component:input("requested_rank","Respuesta","Escribe el rango que solicitas.",true,1)},
+ {type:18,label:"Aprobado por (sin @)",description:"Indica el nombre de quien aprobó tu entrevista IC.",component:input("approved_by","Respuesta","Escribe el nombre, sin mencionar a nadie.",true,1)}
 ]})}
 function applicationQuestions(){return [
  "1. **Nombre y edad (IC)**\n   Indica el nombre de tu personaje y su edad dentro del servidor.",
@@ -84,7 +86,7 @@ function applicationQuestions(){return [
  "4. **Mala praxis o corrupción**\n   Si descubres que un compañero ha cometido una falta grave o ha aceptado un soborno, ¿qué harías y a quién lo comunicarías?",
  "5. **Situaciones policiales**\n   - **Caso 1:** Estás solo ante varios vehículos sospechosos. ¿Cómo pides apoyo?\n   - **Caso 2:** Una persona está agresiva, desobedece y tiene un bate. ¿Cómo actuarías?"
 ].join("\n\n")}
-function applicationInstructions(){return response(4,{flags:64,embeds:[{title:"Preguntas de postulación · PRIME POLICE",description:applicationQuestions(),color:14264415,footer:{text:"Lee las preguntas y pulsa Continuar para responderlas."}}],components:[{type:1,components:[{type:2,style:1,label:"Continuar · Responder preguntas",custom_id:"prime_application_form"}]}]})}
+function applicationInstructionsPayload(){return {embeds:[{title:"Preguntas de postulación · PRIME POLICE",description:applicationQuestions(),color:14264415,footer:{text:"Lee las preguntas y pulsa Continuar para responderlas."}}],components:[{type:1,components:[{type:2,style:1,label:"Continuar · Responder preguntas",custom_id:"prime_application_form"}]}]}}
 function modal(){return response(9,{custom_id:"prime_application_submit",title:"Postulación · PRIME POLICE",components:[
  {type:18,label:"Nombre y edad (IC)",description:"Indica el nombre de tu personaje y su edad dentro del servidor.",component:input("character_info","Respuesta","Escribe tu respuesta.")},
  {type:18,label:"Motivación y mejora personal",description:"¿Por qué quieres formar parte de la Policía? ¿Cuáles son tus virtudes y qué aspectos mejorarías?",component:input("motivation","Respuesta","Escribe tu respuesta.")},
@@ -125,7 +127,10 @@ async function handle(i:any){
   return ephemeral("Comando no reconocido.");
  }
  if(i.type===3){
-  if(i.data?.custom_id==="prime_apply")return applicationInstructions();
+  if(i.data?.custom_id==="prime_apply"){
+   EdgeRuntime.waitUntil((async()=>{try{await editInteractionResponse(i,applicationInstructionsPayload())}catch(error){console.error("Could not show application instructions:",String(error))}})());
+   return response(5,{data:{flags:64}});
+  }
   if(i.data?.custom_id==="prime_application_form")return modal();
   if(i.data?.custom_id==="prime_rank_request")return rankRequestModal();
   return ephemeral("Interacción no reconocida.");
