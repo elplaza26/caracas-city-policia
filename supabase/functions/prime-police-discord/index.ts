@@ -71,10 +71,6 @@ async function processRankRequest(i:any,userId:string,username:string,a:any){
  const rows=await db("police_rank_requests",{method:"POST",body:JSON.stringify({discord_user_id:userId,discord_username:username,character_name:characterName,plate,requested_rank_name:rankName,approved_by_name:approvedBy})});
  const request=rows?.[0];
  if(!request?.id)throw Error("Rank request was not stored");
- try{
-  const posted=await discord("/channels/"+RANK_REQUEST_CHANNEL_ID+"/messages",{method:"POST",body:JSON.stringify({embeds:[{title:"📋 Solicitud de rango · UCOP",description:"Nueva solicitud para revisión de UCOP.",fields:[{name:"Nombre del personaje",value:characterName},{name:"Número de placa",value:plate},{name:"Rango solicitado",value:rankName},{name:"Aprobado por",value:approvedBy},{name:"Solicitado por",value:"<@"+userId+">"}],color:14264415,footer:{text:"Solicitud "+String(request.id)+" · Revisión pendiente en la web UCOP"}}],allowed_mentions:{parse:[],users:[]}})}) as any;
-  if(posted?.id)await db("police_rank_requests?id=eq."+encodeURIComponent(String(request.id)),{method:"PATCH",body:JSON.stringify({discord_message_id:String(posted.id)})});
- }catch(error){console.error("Could not post rank request to Discord channel:",String(error));await editInteractionReply(i,"La solicitud quedó guardada en la web UCOP, pero no se pudo publicar en el canal de solicitudes. Contacta con UCOP.");return;}
  await editInteractionReply(i,"Solicitud de rango enviada a UCOP para revisión. El equipo comprobará la aprobación de tu entrevista IC.");
 }
 const modalInput=(id:string,placeholder:string,required=true,style=2,maxLength=style===1?100:1000)=>({type:4,custom_id:id,style,...(placeholder?{placeholder}:{}),...(required?{min_length:1}:{}),max_length:maxLength,required});
@@ -111,7 +107,7 @@ async function handle(i:any){
    EdgeRuntime.waitUntil((async()=>{
     try{
      const applicationPanel={embeds:[{title:"📝 Preselección de ingreso · PRIME POLICE",description:"Completa la postulación para que **UCOP** revise tu solicitud. Cada persona dispone de un máximo de **3 intentos**.\n\nSi te aprueban, recibirás el rol **Preselección** y UCOP coordinará contigo una **entrevista IC**. Después de aprobarla, podrás solicitar el rol de Policía y tu rango desde <#"+RANK_REQUEST_CHANNEL_ID+">.",color:14264415,footer:{text:"PRIME POLICE · Preselección UCOP"}}],components:[{type:1,components:[{type:2,style:1,label:"Presentar postulación",custom_id:"prime_apply"}]}]};
-     const rankPanel={embeds:[{title:"📈 Solicitud de rango · UCOP",description:"Este formulario es para personas con rol **Preselección o Policía** que ya aprobaron su **entrevista IC**.\n\nCompleta el nombre del personaje, número de placa, rango solicitado y el nombre de quien aprobó la entrevista (**sin @**). Si todavía no hay rangos configurados, deja el rango vacío: UCOP podrá aprobar solo el rol de **Policía** y asignar un rango más adelante.",color:14264415,footer:{text:"PRIME POLICE · Solicitudes UCOP"}}],components:[{type:1,components:[{type:2,style:2,label:"Solicitar rango",custom_id:"prime_rank_request"}]}]};
+     const rankPanel={embeds:[{title:"📈 Solicitud de rango · UCOP",description:"Este formulario es para personas con rol **Preselección o Policía** que ya aprobaron su **entrevista IC**.\n\nCompleta el formulario. El acuse y las respuestas del formulario son privados: solo los verá quien lo envía. UCOP revisará la solicitud desde la web. Si aún no hay rangos configurados, se podrá aprobar solo el rol de **Policía** y añadir el rango más adelante.",color:14264415,footer:{text:"PRIME POLICE · Solicitudes UCOP · Respuesta privada"}}],components:[{type:1,components:[{type:2,style:2,label:"Solicitar rango",custom_id:"prime_rank_request"}]}]};
      await publishOrUpdatePanel(APPLICATION_ANNOUNCEMENTS_CHANNEL_ID,"prime_apply",applicationPanel);
      await publishOrUpdatePanel(RANK_REQUEST_CHANNEL_ID,"prime_rank_request",rankPanel);
      await editInteractionReply(i,"Paneles de postulación y solicitud de rango actualizados.");
@@ -138,7 +134,7 @@ async function handle(i:any){
  if(i.type===5&&i.data?.custom_id==="prime_rank_request_submit"){
   const a=values(i);
   EdgeRuntime.waitUntil((async()=>{try{await processRankRequest(i,userId,username,a);}catch(error){console.error("Could not process rank request:",String(error));try{await editInteractionReply(i,"No se pudo completar la solicitud de rango. Contacta con UCOP antes de volver a enviarla.");}catch(replyError){console.error("Could not update rank request interaction:",String(replyError));}}})());
-  return response(5,{data:{}});
+  return response(5,{data:{flags:64}});
  }
  if(i.type===5&&i.data?.custom_id==="prime_application_submit"){
   const a=values(i);const personal=a.character_info||"";
@@ -150,7 +146,7 @@ async function handle(i:any){
 }
 Deno.serve(async(req:Request)=>{
  if(req.method==="OPTIONS")return new Response(null,{status:204,headers:CORS});
- if(req.method==="GET")return json({ok:true,service:"PRIME POLICE Discord applications",release:"rank-only-submit-2026-10-27b",configured:{discord:Boolean(BOT_TOKEN),database:Boolean(SUPABASE_URL&&SERVICE_KEY),public_key:Boolean(DISCORD_PUBLIC_KEY)},application_id:APPLICATION_ID,guild_id:GUILD_ID,commands:["publicar_postulaciones","postulacion"],message:DISCORD_PUBLIC_KEY?"Endpoint disponible.":"Falta configurar DISCORD_PUBLIC_KEY en los secretos de Supabase."});
+ if(req.method==="GET")return json({ok:true,service:"PRIME POLICE Discord applications",release:"rank-form-private-2026-10-27c",configured:{discord:Boolean(BOT_TOKEN),database:Boolean(SUPABASE_URL&&SERVICE_KEY),public_key:Boolean(DISCORD_PUBLIC_KEY)},application_id:APPLICATION_ID,guild_id:GUILD_ID,commands:["publicar_postulaciones","postulacion"],message:DISCORD_PUBLIC_KEY?"Endpoint disponible.":"Falta configurar DISCORD_PUBLIC_KEY en los secretos de Supabase."});
  if(req.method!=="POST")return json({error:"Method not allowed"},405);
  const body=await req.text();if(!await validSignature(req,body))return json({error:"Invalid Discord signature or DISCORD_PUBLIC_KEY not configured"},401);
  let i:any;try{i=JSON.parse(body)}catch{return json({error:"Invalid JSON"},400)}
