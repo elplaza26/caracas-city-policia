@@ -582,7 +582,10 @@ async function currentUser(req: Request) {
     const username = String(user.username ?? "Discord");
     const displayName = String(user.global_name ?? username);
     const avatarHash = String(user.avatar ?? "");
-    const avatarUrl = avatarHash
+    const guildAvatarHash = String(member?.avatar ?? "");
+    const avatarUrl = guildAvatarHash
+      ? "https://cdn.discordapp.com/guilds/" + GUILD_ID + "/users/" + userId + "/avatars/" + guildAvatarHash + (guildAvatarHash.startsWith("a_") ? ".gif" : ".png") + "?size=128"
+      : avatarHash
       ? "https://cdn.discordapp.com/avatars/" + userId + "/" + avatarHash + (avatarHash.startsWith("a_") ? ".gif" : ".png") + "?size=128"
       : "https://cdn.discordapp.com/embed/avatars/" + String(Number((BigInt(userId) >> 22n) % 6n)) + ".png";
     const roles: string[] = member?.roles ?? [];
