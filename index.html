@@ -227,7 +227,7 @@ function renderApplications() {
       detail("Intento de postulación", String(app.attempt_number || 1) + " / 3"),
       detail(isRoleplayForm ? "Historia del personaje" : "Datos IC / OOC / edad / Discord", a.character_info || a.personal || app.full_name),
       detail(isRoleplayForm ? "Motivación y aporte" : "Experiencia previa y tiempo en RolePlay", a.motivation || a.experience_time || app.previous_experience),
-      detail(isRoleplayForm ? "Situación policial" : "Meta dentro de la Policía y preferencia PVP / RolePlay", a.control_scenario || a.goal_preference),
+      detail(isRoleplayForm ? "Detención y derechos" : "Meta dentro de la Policía y preferencia PVP / RolePlay", a.detention_rights || a.control_scenario || a.goal_preference),
       detail(isRoleplayForm ? "Trabajo en equipo" : "Expectativas y motivo para unirse", a.team_scenario || a.expectations_why || app.motivation),
       detail(isRoleplayForm ? "Disponibilidad y normativa" : "Acepta las normativas de PRIME POLICE", a.availability_rules || a.rules_accepted),
       detail("Motivo de decisión", app.decision_reason)
