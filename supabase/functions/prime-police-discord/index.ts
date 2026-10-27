@@ -77,14 +77,22 @@ function rankRequestModal(){return response(9,{custom_id:"prime_rank_request_sub
  {type:1,components:[input("requested_rank","Rango solicitado","Escribe el nombre del rango configurado en la web.",true,1)]},
  {type:1,components:[input("approved_by","Aprobado por (sin @)","Escribe el nombre, sin mencionar a nadie.",true,1)]}
 ]})}
+function applicationQuestions(){return [
+ "1. **Nombre y edad (IC)**\n   Indica el nombre de tu personaje y su edad dentro del servidor.",
+ "2. **Motivación y mejora personal**\n   ¿Por qué quieres formar parte de la Policía? ¿Cuáles son tus virtudes y qué aspectos mejorarías?",
+ "3. **Responsabilidad y órdenes**\n   ¿Qué significa para ti pertenecer a la Policía? ¿Cómo actuarías ante una orden de un superior que consideras incorrecta o contraria a los protocolos?",
+ "4. **Mala praxis o corrupción**\n   Si descubres que un compañero ha cometido una falta grave o ha aceptado un soborno, ¿qué harías y a quién lo comunicarías?",
+ "5. **Situaciones policiales**\n   - **Caso 1:** Estás solo ante varios vehículos sospechosos. ¿Cómo pides apoyo?\n   - **Caso 2:** Una persona está agresiva, desobedece y tiene un bate. ¿Cómo actuarías?"
+].join("\n\n")}
+function applicationInstructions(){return response(4,{flags:64,embeds:[{title:"Preguntas de postulación · PRIME POLICE",description:applicationQuestions(),color:14264415,footer:{text:"Lee las preguntas y pulsa Continuar para responderlas."}}],components:[{type:1,components:[{type:2,style:1,label:"Continuar · Responder preguntas",custom_id:"prime_application_form"}]}]})}
 function modal(){return response(9,{custom_id:"prime_application_submit",title:"Postulación · PRIME POLICE",components:[
- {type:1,components:[input("character_info","Nombre y edad (IC)","")]},
- {type:1,components:[input("motivation","Motivación y mejora personal","¿Por qué quieres formar parte de la Policía? ¿Cuáles son tus virtudes y qué aspectos mejorarías?")]},
- {type:1,components:[input("detention_rights","Responsabilidad y órdenes","¿Qué significa ser policía? ¿Acatarías órdenes legítimas y qué harías ante una orden ilegal?")]},
- {type:1,components:[input("scene_resolution","Mala praxis o corrupción","¿Qué harías si un compañero comete una falta grave o acepta un soborno? ¿A quién informarías?")]},
- {type:1,components:[input("roleplay_response","Vehículos sospechosos | agresiva y con bate","1) Estás solo: ¿cómo actúas y pides apoyo? 2) Desobedece: ¿cómo procedes según protocolo?")]}
+ {type:18,label:"Nombre y edad (IC)",description:"Indica el nombre de tu personaje y su edad dentro del servidor.",component:input("character_info","Respuesta","Escribe tu respuesta.")},
+ {type:18,label:"Motivación y mejora personal",description:"¿Por qué quieres formar parte de la Policía? ¿Cuáles son tus virtudes y qué aspectos mejorarías?",component:input("motivation","Respuesta","Escribe tu respuesta.")},
+ {type:18,label:"Responsabilidad y órdenes",component:input("detention_rights","Respuesta","Responde a la pregunta completa que aparece en el paso anterior.")},
+ {type:18,label:"Mala praxis o corrupción",component:input("scene_resolution","Respuesta","Responde a la pregunta completa que aparece en el paso anterior.")},
+ {type:18,label:"Situaciones policiales",component:input("roleplay_response","Responde ambos casos","Responde a los dos casos que aparecen en el paso anterior.")}
 ]})}
-function values(interaction:any){const out:any={};for(const row of interaction.data?.components||[])for(const c of row.components||[])out[c.custom_id]=String(c.value||"").trim();return out}
+function values(interaction:any){const out:any={};const visit=(node:any)=>{if(!node||typeof node!=="object")return;if(typeof node.custom_id==="string"&&node.value!==undefined)out[node.custom_id]=String(node.value||"").trim();if(Array.isArray(node.components))for(const child of node.components)visit(child);if(node.component)visit(node.component)};for(const component of interaction.data?.components||[])visit(component);return out}
 async function handle(i:any){
  if(i.type===1)return response(1,{});
  const user=i.member?.user||i.user;const userId=String(user?.id||"");const username=String(user?.global_name||user?.username||"Usuario Discord");
@@ -117,7 +125,8 @@ async function handle(i:any){
   return ephemeral("Comando no reconocido.");
  }
  if(i.type===3){
-  if(i.data?.custom_id==="prime_apply")return modal();
+  if(i.data?.custom_id==="prime_apply")return applicationInstructions();
+  if(i.data?.custom_id==="prime_application_form")return modal();
   if(i.data?.custom_id==="prime_rank_request")return rankRequestModal();
   return ephemeral("Interacción no reconocida.");
  }
