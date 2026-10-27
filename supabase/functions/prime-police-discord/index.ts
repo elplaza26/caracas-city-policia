@@ -27,6 +27,17 @@ async function editInteractionReply(interaction:any,content:string){
  const r=await fetch("https://discord.com/api/v10/webhooks/"+APPLICATION_ID+"/"+encodeURIComponent(token)+"/messages/@original",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({content})});
  if(!r.ok)throw Error("Discord interaction reply "+r.status);
 }
+async function processApplicationSubmit(i:any,userId:string,username:string,a:any){
+ const personal=a.character_info||"";const characterName=(personal.split(/\r?\n|\|/)[0].replace(/^Nombre IC:\s*/i,"").trim()||personal).slice(0,100);
+ const answer={character_info:personal,motivation:a.motivation,detention_rights:a.detention_rights,scene_resolution:a.scene_resolution,roleplay_response:a.roleplay_response};
+ const submitted=await db("rpc/submit_police_application",{method:"POST",body:JSON.stringify({p_discord_user_id:userId,p_discord_username:username,p_full_name:characterName,p_previous_experience:a.motivation,p_motivation:a.motivation,p_answers:answer})});
+ if(!submitted?.ok){await editInteractionReply(i,String(submitted?.message||"No se pudo aceptar la postulación."));return;}
+ const app=submitted.application;
+ const embed={title:"📋 Nueva postulación · PRIME POLICE",description:"**Solicitante:** <@"+userId+">\n**Intento:** "+submitted.attempt_number+" de 3",fields:[{name:"Ficha del personaje (IC)",value:personal.slice(0,1000)},{name:"Motivación, virtudes y mejoras",value:a.motivation.slice(0,1000)},{name:"Fuerza y órdenes",value:a.detention_rights.slice(0,1000)},{name:"Mala praxis o corrupción",value:a.scene_resolution.slice(0,1000)},{name:"Casos prácticos 1 y 2",value:a.roleplay_response.slice(0,1000)}],color:14264415,footer:{text:"ID: "+String(app.id)+" · Intento "+submitted.attempt_number+"/3 · Revisar desde el panel web"}};
+ try{const posted=await discord("/channels/"+APPLICATION_CHANNEL_ID+"/messages",{method:"POST",body:JSON.stringify({embeds:[embed]})}) as any;if(posted?.id)await db("police_applications?id=eq."+encodeURIComponent(String(app.id)),{method:"PATCH",body:JSON.stringify({discord_message_id:String(posted.id)})});}
+ catch(error){console.error("Could not publish application intake message:",String(error));await editInteractionReply(i,"Tu postulación quedó guardada, pero no se pudo publicar el aviso en el canal. Contacta con un administrador para confirmar su recepción.");return;}
+ await editInteractionReply(i,"¡Postulación recibida! Este es tu intento "+submitted.attempt_number+" de 3. El equipo de PRIME POLICE la revisará y comunicará el resultado en el canal correspondiente.");
+}
 const input=(id:string,label:string,placeholder:string,required=true,style=2)=>({type:4,custom_id:id,label,style,placeholder,min_length:1,max_length:style===1?100:1000,required});
 function modal(){return response(9,{custom_id:"prime_application_submit",title:"Postulación · PRIME POLICE",components:[
  {type:1,components:[input("character_info","Ficha del personaje (IC)","Nombre IC: nombre y apellidos | Edad IC: ... | Historial: limpio o antecedentes activos.")]},
@@ -69,17 +80,10 @@ async function handle(i:any){
   return ephemeral("Interacción no reconocida.");
  }
  if(i.type===5&&i.data?.custom_id==="prime_application_submit"){
-  const a=values(i);const personal=a.character_info||"";const characterName=(personal.split(/\r?\n|\|/)[0].replace(/^Nombre IC:\s*/i,"").trim()||personal).slice(0,100);
+  const a=values(i);const personal=a.character_info||"";
   if(!personal||!a.motivation||!a.detention_rights||!a.scene_resolution||!a.roleplay_response)return ephemeral("Completa todos los apartados antes de enviar.");
-  const answer={character_info:personal,motivation:a.motivation,detention_rights:a.detention_rights,scene_resolution:a.scene_resolution,roleplay_response:a.roleplay_response};
-  const submitted=await db("rpc/submit_police_application",{method:"POST",body:JSON.stringify({p_discord_user_id:userId,p_discord_username:username,p_full_name:characterName,p_previous_experience:a.motivation,p_motivation:a.motivation,p_answers:answer})});
-  if(!submitted?.ok)return ephemeral(String(submitted?.message||"No se pudo aceptar la postulación."));
-  const app=submitted.application;
-
-  const embed={title:"📋 Nueva postulación · PRIME POLICE",description:"**Solicitante:** <@"+userId+">\n**Intento:** "+submitted.attempt_number+" de 3",fields:[{name:"Ficha del personaje (IC)",value:personal.slice(0,1000)},{name:"Motivación, virtudes y mejoras",value:a.motivation.slice(0,1000)},{name:"Fuerza y órdenes",value:a.detention_rights.slice(0,1000)},{name:"Mala praxis o corrupción",value:a.scene_resolution.slice(0,1000)},{name:"Casos prácticos 1 y 2",value:a.roleplay_response.slice(0,1000)}],color:14264415,footer:{text:"ID: "+String(app.id)+" · Intento "+submitted.attempt_number+"/3 · Revisar desde el panel web"}};
-  try{const posted=await discord("/channels/"+APPLICATION_CHANNEL_ID+"/messages",{method:"POST",body:JSON.stringify({embeds:[embed]})}) as any;if(posted?.id)await db("police_applications?id=eq."+encodeURIComponent(String(app.id)),{method:"PATCH",body:JSON.stringify({discord_message_id:String(posted.id)})});}
-  catch(error){console.error("Could not publish application intake message:",String(error));return ephemeral("Tu postulación quedó guardada, pero no se pudo publicar el aviso en el canal. Contacta con un administrador para confirmar su recepción.");}
-  return ephemeral("¡Postulación recibida! Este es tu intento "+submitted.attempt_number+" de 3. El equipo de PRIME POLICE la revisará y comunicará el resultado en el canal correspondiente.");
+  EdgeRuntime.waitUntil((async()=>{try{await processApplicationSubmit(i,userId,username,a);}catch(error){console.error("Could not process application submit:",String(error));try{await editInteractionReply(i,"No se pudo completar el envío. Comprueba si quedó registrada en el panel y contacta con un administrador antes de volver a intentarlo.");}catch(replyError){console.error("Could not update application interaction:",String(replyError));}}})());
+  return response(5,{data:{flags:64}});
  }
  return ephemeral("Interacción no compatible.");
 }
