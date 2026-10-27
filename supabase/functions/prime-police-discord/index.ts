@@ -44,7 +44,7 @@ function modal(){return response(9,{custom_id:"prime_application_submit",title:"
  {type:1,components:[input("motivation","Motivación, virtudes y mejoras","¿Qué aportarías? Indica 2 virtudes y 2 debilidades o aspectos que tu personaje debe mejorar.")]},
  {type:1,components:[input("detention_rights","Fuerza y órdenes","Explica la fuerza proporcional, cuándo usarías un arma y qué harías ante una orden ilegal.")]},
  {type:1,components:[input("scene_resolution","Mala praxis o corrupción","Si presencias mala praxis o corrupción de otro agente, ¿cómo actuarías y a quién informarías?")]},
- {type:1,components:[input("roleplay_response","Casos prácticos 1 y 2","Responde por separado: 1) llegas solo a varios vehículos sospechosos, ¿qué haces primero? 2) ciudadano hostil: redacta con /me y /do.")]}
+ {type:1,components:[input("roleplay_response","Casos prácticos 1 y 2","Caso 1: varios vehículos sospechosos, llegas solo. Caso 2: civil hostil; responde con /me y /do.")]}
 ]})}
 function values(interaction:any){const out:any={};for(const row of interaction.data?.components||[])for(const c of row.components||[])out[c.custom_id]=String(c.value||"").trim();return out}
 async function handle(i:any){
