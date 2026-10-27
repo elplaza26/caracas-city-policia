@@ -14,6 +14,7 @@ const PROTECTED_ROLE_IDS = new Set([
   "1539970134469378075", "1539970134469378074", "1539970134469378073",
   ...MANAGER_ROLE_IDS,
 ]);
+const BLOCKED_ROLE_PERMISSION_FLAGS = (1n << 1n) | (1n << 2n) | (1n << 3n) | (1n << 4n) | (1n << 5n) | (1n << 28n) | (1n << 29n) | (1n << 40n);
 const BOT_TOKEN = Deno.env.get("DISCORD_BOT_TOKEN") ?? "";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -87,6 +88,11 @@ async function authorizedUser(req: Request): Promise<string | null> {
 
 const validDiscordId = (value: string) => /^\d{17,20}$/.test(value);
 const enc = (value: string) => encodeURIComponent(value);
+function isAssignableRankRole(role: any) {
+  if (!role || role.managed || PROTECTED_ROLE_IDS.has(String(role.id))) return false;
+  try { return (BigInt(String(role.permissions ?? "0")) & BLOCKED_ROLE_PERMISSION_FLAGS) === 0n; }
+  catch { return false; }
+}
 async function allowed(req: Request) {
   const userId = await authorizedUser(req);
   if (!userId) return { error: json({ error: "No tienes permiso para gestionar el personal." }, 403) };
@@ -168,7 +174,7 @@ async function rankConfig(req: Request) {
     const roles = (guildRoles ?? []).map((r: any) => ({ id: String(r.id), name: String(r.name), position: Number(r.position), managed: Boolean(r.managed) }));
     const byId = new Map(roles.map((r: any) => [r.id, r]));
     const ranks = (configured ?? []).map((r: any) => ({ ...r, role_name: byId.get(r.role_id)?.name ?? r.role_name }));
-    const available = roles.filter((r: any) => r.id !== GUILD_ID && !r.managed && !PROTECTED_ROLE_IDS.has(r.id)).sort((a: any, b: any) => a.position - b.position || a.name.localeCompare(b.name, "es"));
+    const available = roles.filter((r: any) => r.id !== GUILD_ID && isAssignableRankRole(r)).sort((a: any, b: any) => a.position - b.position || a.name.localeCompare(b.name, "es"));
     return json({ ok: true, ranks, available_roles: available });
   } catch (error) { console.error("Rank configuration read error:", String(error)); return json({ error: "No se pudieron cargar los rangos de Discord." }, 502); }
 }
@@ -181,7 +187,7 @@ async function importAllRankRoles(req: Request) {
       discord("/guilds/" + GUILD_ID + "/roles") as Promise<any[]>,
     ]);
     const eligible = (guildRoles ?? [])
-      .filter((role: any) => String(role.id) !== GUILD_ID && !role.managed && !PROTECTED_ROLE_IDS.has(String(role.id)))
+      .filter((role: any) => String(role.id) !== GUILD_ID && isAssignableRankRole(role))
       .sort((a: any, b: any) => Number(a.position) - Number(b.position) || String(a.name).localeCompare(String(b.name), "es"));
     const roleById = new Map(eligible.map((role: any) => [String(role.id), role]));
     const retained = (existing ?? []).filter((rank: any) => roleById.has(String(rank.role_id)));
@@ -214,7 +220,7 @@ async function saveRankConfig(req: Request) {
   try {
     const guildRoles = await discord("/guilds/" + GUILD_ID + "/roles") as any[];
     const byId = new Map((guildRoles ?? []).map((r: any) => [String(r.id), r]));
-    for (const id of ids) { const role: any = byId.get(id); if (!role || role.managed || PROTECTED_ROLE_IDS.has(id)) return json({ error: "La lista incluye un rol protegido o que no existe en el servidor." }, 400); }
+    for (const id of ids) { const role: any = byId.get(id); if (!isAssignableRankRole(role)) return json({ error: "La lista incluye un rol protegido, privilegiado o que no existe en el servidor." }, 400); }
     const existing = await db("police_rank_roles?select=role_id,role_name,rank_order&order=rank_order.asc");
     const removed = (existing ?? []).filter((r: any) => !ids.includes(r.role_id));
     if (removed.length) {
