@@ -2,6 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const GUILD_ID = "1539970134469378068";
 const PRESELECTION_ROLE_ID = "1564685481457877012";
+const POLICE_ROLE_ID = "1539970134482092038";
 const CIC_ROLE_ID = "1539970134519578772";
 const EXPELLED_ROLE_ID = "1539970134482092034";
 const APPLICATION_CHANNEL_ID = "1539970136683847857";
@@ -57,7 +58,7 @@ async function processRankRequest(i:any,userId:string,username:string,a:any){
  if(!characterName||!plate||!approvedBy){await editInteractionReply(i,"Completa nombre IC, placa y nombre de quien aprobó la entrevista.");return;}
  const member=await discord("/guilds/"+GUILD_ID+"/members/"+encodeURIComponent(userId)) as any;
  const roles:string[]=member?.roles||[];
- if(!roles.includes(PRESELECTION_ROLE_ID)||roles.includes(CIC_ROLE_ID)||roles.includes(EXPELLED_ROLE_ID)){await editInteractionReply(i,"Solo las personas aceptadas con el rol de Preselección pueden enviar una solicitud de rango tras su entrevista IC.");return;}
+ if((!roles.includes(PRESELECTION_ROLE_ID)&&!roles.includes(POLICE_ROLE_ID))||roles.includes(CIC_ROLE_ID)||roles.includes(EXPELLED_ROLE_ID)){await editInteractionReply(i,"Solo las personas con rol Preselección o Policía pueden solicitar rango tras su entrevista IC.");return;}
  const configured=await db("police_rank_roles?select=role_name");
  const ranks=configured||[];
  let rank:any=null;
@@ -110,7 +111,7 @@ async function handle(i:any){
    EdgeRuntime.waitUntil((async()=>{
     try{
      const applicationPanel={embeds:[{title:"📝 Preselección de ingreso · PRIME POLICE",description:"Completa la postulación para que **UCOP** revise tu solicitud. Cada persona dispone de un máximo de **3 intentos**.\n\nSi te aprueban, recibirás el rol **Preselección** y UCOP coordinará contigo una **entrevista IC**. Después de aprobarla, podrás solicitar el rol de Policía y tu rango desde <#"+RANK_REQUEST_CHANNEL_ID+">.",color:14264415,footer:{text:"PRIME POLICE · Preselección UCOP"}}],components:[{type:1,components:[{type:2,style:1,label:"Presentar postulación",custom_id:"prime_apply"}]}]};
-     const rankPanel={embeds:[{title:"📈 Solicitud de rango y rol de Policía · UCOP",description:"Este formulario es para personas con el rol **Preselección** que ya aprobaron su **entrevista IC**.\n\nCompleta el nombre del personaje, número de placa, rango solicitado y el nombre de quien aprobó la entrevista (**sin @**). UCOP revisará la solicitud en la web y, si la aprueba, asignará el rol de **Policía** junto con el rango solicitado.",color:14264415,footer:{text:"PRIME POLICE · Solicitudes UCOP"}}],components:[{type:1,components:[{type:2,style:2,label:"Solicitar rango",custom_id:"prime_rank_request"}]}]};
+     const rankPanel={embeds:[{title:"📈 Solicitud de rango · UCOP",description:"Este formulario es para personas con rol **Preselección o Policía** que ya aprobaron su **entrevista IC**.\n\nCompleta el nombre del personaje, número de placa, rango solicitado y el nombre de quien aprobó la entrevista (**sin @**). Si todavía no hay rangos configurados, deja el rango vacío: UCOP podrá aprobar solo el rol de **Policía** y asignar un rango más adelante.",color:14264415,footer:{text:"PRIME POLICE · Solicitudes UCOP"}}],components:[{type:1,components:[{type:2,style:2,label:"Solicitar rango",custom_id:"prime_rank_request"}]}]};
      await publishOrUpdatePanel(APPLICATION_ANNOUNCEMENTS_CHANNEL_ID,"prime_apply",applicationPanel);
      await publishOrUpdatePanel(RANK_REQUEST_CHANNEL_ID,"prime_rank_request",rankPanel);
      await editInteractionReply(i,"Paneles de postulación y solicitud de rango actualizados.");
