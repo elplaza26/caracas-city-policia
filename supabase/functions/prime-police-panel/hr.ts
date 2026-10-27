@@ -2,11 +2,12 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const GUILD_ID = "1539970134469378068";
 const POLICE_ROLE_ID = "1539970134482092038";
+const PRESELECTION_ROLE_ID = "1564685481457877012";
 const CIC_ROLE_ID = "1539970134519578772";
 const EXPELLED_ROLE_ID = "1539970134482092034";
 const MANAGER_ROLE_IDS = new Set(["1539970134565982313", "1539970134544748562", "1539970134544748556", "1539970134544748557", "1539970134519578773", "1539970134519578774"]);
 const PROTECTED_ROLE_IDS = new Set([
-  POLICE_ROLE_ID, EXPELLED_ROLE_ID, CIC_ROLE_ID,
+  POLICE_ROLE_ID, PRESELECTION_ROLE_ID, EXPELLED_ROLE_ID, CIC_ROLE_ID,
   "1539970134482092032", "1539970134469378077", "1539970134469378076",
   "1539970134469378075", "1539970134469378074", "1539970134469378073",
   ...MANAGER_ROLE_IDS,
@@ -192,6 +193,95 @@ async function saveRankConfig(req: Request) {
   } catch (error) { console.error("Rank history read error:", String(error)); return json({ error: "No se pudo cargar el historial de rangos." }, 500); }
 }
 
+async function listRankRequests(req: Request) {
+  const auth = await allowed(req); if (auth.error) return auth.error;
+  try {
+    const rows = await db("police_rank_requests?select=*&order=created_at.desc&limit=500");
+    return json({ ok: true, requests: rows ?? [] });
+  } catch (error) {
+    console.error("Rank request list error:", String(error));
+    return json({ error: "No se pudieron cargar las solicitudes de rango." }, 500);
+  }
+}
+
+async function reviewRankRequest(req: Request) {
+  const auth = await allowed(req); if (auth.error) return auth.error;
+  let body: any; try { body = await req.json(); } catch { return json({ error: "Solicitud inválida." }, 400); }
+  const id = String(body?.id ?? "").trim();
+  const decision = String(body?.decision ?? "");
+  if (!/^[0-9a-f-]{36}$/i.test(id) || !["accept", "reject"].includes(decision)) return json({ error: "Revisa la solicitud y la decisión." }, 400);
+  try {
+    const rows = await db("police_rank_requests?select=*&id=eq." + enc(id) + "&limit=1");
+    const rankRequest = rows?.[0];
+    if (!rankRequest) return json({ error: "No se encontró la solicitud de rango." }, 404);
+    if (rankRequest.status !== "pending") return json({ error: "Esta solicitud ya fue revisada." }, 409);
+    const reviewer = await discord("/guilds/" + GUILD_ID + "/members/" + enc(auth.userId)) as any;
+    const reviewerName = String(reviewer.nick || reviewer.user?.global_name || reviewer.user?.username || auth.userId);
+
+    if (decision === "accept") {
+      const rankRows = await db("police_rank_roles?select=role_id,role_name,rank_order&order=rank_order.asc");
+      const targetRank = (rankRows ?? []).find((rank: any) => String(rank.role_name).trim().toLocaleLowerCase("es") === String(rankRequest.requested_rank_name).trim().toLocaleLowerCase("es"));
+      if (!targetRank) return json({ error: "El rango solicitado ya no está configurado. Actualiza la escala antes de aprobar." }, 409);
+      const profiles = await db("police_personnel?select=discord_user_id,unit,plate,rank_role_id,rank_name&discord_user_id=eq." + enc(String(rankRequest.discord_user_id)) + "&limit=1");
+      const profile = profiles?.[0];
+      if (profile?.unit && profile.unit !== "UCOP") return json({ error: "El miembro ya pertenece a otra unidad; no se modificó su ficha." }, 409);
+      const member = await discord("/guilds/" + GUILD_ID + "/members/" + enc(String(rankRequest.discord_user_id))) as any;
+      const memberRoles: string[] = member.roles ?? [];
+      if ((!memberRoles.includes(PRESELECTION_ROLE_ID) && !memberRoles.includes(POLICE_ROLE_ID)) || memberRoles.includes(CIC_ROLE_ID) || memberRoles.includes(EXPELLED_ROLE_ID)) return json({ error: "La persona no tiene un rol válido de ingreso UCOP para aprobar esta solicitud." }, 409);
+      const addedPoliceRole = !memberRoles.includes(POLICE_ROLE_ID);
+      if (addedPoliceRole) await discord("/guilds/" + GUILD_ID + "/members/" + enc(String(rankRequest.discord_user_id)) + "/roles/" + POLICE_ROLE_ID, { method: "PUT", body: "{}" });
+      const headers = { authorization: req.headers.get("authorization") ?? "", "content-type": "application/json" };
+      if (!profile || !profile.unit) {
+        const registerRequest = new Request("https://internal/?panel=personnel-register", { method: "POST", headers, body: JSON.stringify({ discord_user_id: rankRequest.discord_user_id, full_name: rankRequest.character_name, name_ooc: rankRequest.discord_username, plate: rankRequest.plate, unit: "UCOP", rank_role_id: targetRank.role_id }) });
+        const registered = await registerPersonnel(registerRequest);
+        const result = await registered.json().catch(() => ({}));
+        if (!registered.ok) {
+          if (addedPoliceRole) { try { await discord("/guilds/" + GUILD_ID + "/members/" + enc(String(rankRequest.discord_user_id)) + "/roles/" + POLICE_ROLE_ID, { method: "DELETE" }); } catch (rollbackError) { console.error("Police role rollback failed:", String(rollbackError)); } }
+          return json({ error: result.error || "No se pudo registrar al agente al aprobar el rango." }, registered.status);
+        }
+        try {
+          await db("police_rank_history", { method: "POST", body: JSON.stringify({ discord_user_id: rankRequest.discord_user_id, discord_username: rankRequest.discord_username, full_name: rankRequest.character_name, action_type: "assignment", previous_role_id: null, previous_rank_name: "", new_role_id: targetRank.role_id, new_rank_name: String(targetRank.role_name), reason: "Solicitud aprobada por " + rankRequest.approved_by_name, changed_by_discord_id: auth.userId, changed_by_name: reviewerName, created_at: new Date().toISOString() }) });
+        } catch (historyError) { console.error("Initial rank request history write failed:", String(historyError)); }
+      } else {
+        const currentRank = (rankRows ?? []).find((rank: any) => rank.role_id === profile.rank_role_id);
+        if (currentRank?.role_id === targetRank.role_id) {
+          await db("police_personnel?discord_user_id=eq." + enc(String(rankRequest.discord_user_id)) + "&unit=eq.UCOP", { method: "PATCH", body: JSON.stringify({ full_name: rankRequest.character_name, plate: rankRequest.plate, updated_at: new Date().toISOString() }) });
+        } else {
+          const actionType = !currentRank ? "assignment" : Number(targetRank.rank_order) > Number(currentRank.rank_order) ? "promotion" : "demotion";
+          const changeRequest = new Request("https://internal/?panel=rank-change", { method: "POST", headers, body: JSON.stringify({ discord_user_id: rankRequest.discord_user_id, action_type: actionType, rank_role_id: targetRank.role_id, full_name: rankRequest.character_name, name_ooc: rankRequest.discord_username, plate: rankRequest.plate, reason: "Solicitud aprobada por " + rankRequest.approved_by_name }) });
+          const changed = await changeRank(changeRequest);
+          const result = await changed.json().catch(() => ({}));
+          if (!changed.ok) {
+            if (addedPoliceRole) { try { await discord("/guilds/" + GUILD_ID + "/members/" + enc(String(rankRequest.discord_user_id)) + "/roles/" + POLICE_ROLE_ID, { method: "DELETE" }); } catch (rollbackError) { console.error("Police role rollback failed:", String(rollbackError)); } }
+            return json({ error: result.error || "No se pudo aplicar el rango solicitado." }, changed.status);
+          }
+        }
+      }
+      if (memberRoles.includes(PRESELECTION_ROLE_ID)) { try { await discord("/guilds/" + GUILD_ID + "/members/" + enc(String(rankRequest.discord_user_id)) + "/roles/" + PRESELECTION_ROLE_ID, { method: "DELETE" }); } catch (error) { console.error("Could not remove preselection role after rank approval:", String(error)); } }
+    }
+
+    const now = new Date().toISOString();
+    const status = decision === "accept" ? "accepted" : "rejected";
+    const updated = await db("police_rank_requests?id=eq." + enc(id) + "&status=eq.pending", {
+      method: "PATCH",
+      body: JSON.stringify({ status, reviewed_by_discord_id: auth.userId, reviewed_by_name: reviewerName, updated_at: now, reviewed_at: now, review_reason: String(body?.reason ?? "").trim().slice(0, 500) || null }),
+    });
+    if (!updated?.length) return json({ error: "La solicitud cambió mientras se revisaba; actualiza la cola." }, 409);
+    if (rankRequest.discord_message_id) {
+      try {
+        await discord("/channels/1539970135375478859/messages/" + enc(String(rankRequest.discord_message_id)), {
+          method: "PATCH",
+          body: JSON.stringify({ embeds: [{ title: decision === "accept" ? "✅ Solicitud de rango · Aprobada" : "❌ Solicitud de rango · Rechazada", description: "Solicitud de <@" + rankRequest.discord_user_id + "> · " + rankRequest.character_name, fields: [{ name: "Rango solicitado", value: rankRequest.requested_rank_name }, { name: "Aprobado por", value: rankRequest.approved_by_name }, { name: "Revisado por UCOP", value: reviewerName }, ...(decision === "accept" ? [{ name: "Asignado", value: "Rol Policía + rango" }] : [])], color: decision === "accept" ? 0x45b879 : 0xe87979, footer: { text: "Solicitud " + id } }], allowed_mentions: { parse: [] } }),
+        });
+      } catch (error) { console.error("Could not update rank request message:", String(error)); }
+    }
+    return json({ ok: true, message: decision === "accept" ? "Solicitud aprobada; rol de Policía y rango asignados." : "Solicitud rechazada." });
+  } catch (error) {
+    console.error("Rank request review error:", String(error));
+    return json({ error: "No se pudo revisar la solicitud de rango." }, 500);
+  }
+}
+
 async function changeRank(req: Request) {
   const auth = await allowed(req); if (auth.error) return auth.error;
   let body: any; try { body = await req.json(); } catch { return json({ error: "Solicitud inválida." }, 400); }
@@ -199,6 +289,9 @@ async function changeRank(req: Request) {
   const targetRoleId = String(body?.rank_role_id ?? "").trim();
   const actionType = String(body?.action_type ?? "");
   const reason = String(body?.reason ?? "").trim().slice(0, 500);
+  const requestedName = String(body?.full_name ?? "").trim().slice(0, 100);
+  const requestedOoc = String(body?.name_ooc ?? "").trim().slice(0, 100);
+  const requestedPlate = String(body?.plate ?? "").trim().slice(0, 30);
   if (!validDiscordId(targetId) || !validDiscordId(targetRoleId) || !["promotion", "demotion", "assignment"].includes(actionType) || reason.length < 3) return json({ error: "Revisa el oficial, el rango y el motivo (mínimo 3 caracteres)." }, 400);
   let oldRoles: string[] = [];
   let didChangeDiscord = false;
@@ -231,7 +324,7 @@ async function changeRank(req: Request) {
     if (currentRank && actionType === "demotion" && Number(targetRank.rank_order) >= Number(currentRank.rank_order)) return json({ error: "Para descender, el nuevo rango debe estar por debajo del actual en la escala." }, 409);
     oldRoles = currentRanks.map((r: any) => String(r.role_id)).filter((roleId: string) => roleId !== targetRoleId);
     const username = String(member.user?.global_name || member.user?.username || targetId);
-    const fullName = String(priorProfile?.full_name || username);
+    const fullName = requestedName || String(priorProfile?.full_name || username);
     const actor = await discord("/guilds/" + GUILD_ID + "/members/" + enc(auth.userId)) as any;
     const actorName = String(actor.nick || actor.user?.global_name || actor.user?.username || auth.userId);
     if (!memberRoles.includes(targetRoleId)) { await discord("/guilds/" + GUILD_ID + "/members/" + enc(targetId) + "/roles/" + targetRoleId, { method: "PUT", body: "{}" }); addedTargetRole = true; }
@@ -240,7 +333,7 @@ async function changeRank(req: Request) {
     const now = new Date().toISOString();
     const updated = {
       discord_user_id: targetId, discord_username: username, full_name: fullName,
-      plate: priorProfile.plate ?? "", unit: "UCOP", name_ooc: priorProfile.name_ooc ?? "", rank_name: String(targetRank.role_name), rank_role_id: targetRoleId,
+      plate: requestedPlate || priorProfile.plate || "", unit: "UCOP", name_ooc: requestedOoc || priorProfile.name_ooc || "", rank_name: String(targetRank.role_name), rank_role_id: targetRoleId,
       status: "active", source_application_id: priorProfile?.source_application_id ?? null,
       created_at: priorProfile?.created_at ?? now, updated_at: now, last_rank_change_at: now,
     };
@@ -277,6 +370,8 @@ export async function handleHr(req: Request, action: string): Promise<Response |
   if (action === "rank-config" && req.method === "GET") return await rankConfig(req);
   if (action === "rank-config-save" && req.method === "POST") return await saveRankConfig(req);
   if (action === "rank-history" && req.method === "GET") return await rankHistory(req);
+  if (action === "rank-requests" && req.method === "GET") return await listRankRequests(req);
+  if (action === "rank-request-review" && req.method === "POST") return await reviewRankRequest(req);
   if (action === "rank-change" && req.method === "POST") return await changeRank(req);
   return null;
 }

@@ -25,9 +25,10 @@
     <div class="side-label">GESTIÓN</div>
     <nav id="sideNav" class="side-nav">
       <button class="workspace-tab active" data-view="applications" data-title="Postulaciones"><span>01</span> Postulaciones</button>
-      <button class="workspace-tab" data-view="personnel" data-title="Personal UCOP"><span>02</span> Personal UCOP</button>
-      <button class="workspace-tab" data-view="ranks" data-title="Ascensos y descensos"><span>03</span> Ascensos y descensos</button>
-      <button class="workspace-tab" data-view="sanctions" data-title="Sanciones UCOP"><span>04</span> Sanciones UCOP</button>
+      <button class="workspace-tab" data-view="rank-requests" data-title="Solicitudes de rango"><span>02</span> Solicitudes de rango</button>
+      <button class="workspace-tab" data-view="personnel" data-title="Personal UCOP"><span>03</span> Personal UCOP</button>
+      <button class="workspace-tab" data-view="ranks" data-title="Ascensos y descensos"><span>04</span> Ascensos y descensos</button>
+      <button class="workspace-tab" data-view="sanctions" data-title="Sanciones UCOP"><span>05</span> Sanciones UCOP</button>
     </nav>
     <div class="sidebar-bottom"><div id="connection" class="connection">Comprobando conexión…</div><button id="logoutButton" class="btn ghost" type="button">Salir del panel</button></div>
   </aside>
@@ -52,7 +53,7 @@
   </section>
 
   <section id="appView" class="hidden">
-    <section class="intro"><h2>Revisión de candidaturas</h2><p>Consulta las postulaciones y revisa por separado las aceptadas y rechazadas.</p></section>
+    <section id="applicationsIntro" class="intro"><h2>Revisión de candidaturas</h2><p>Consulta las postulaciones y revisa por separado las aceptadas y rechazadas.</p></section>
     <section id="applicationStats" class="stats">
       <div class="stat"><span>Pendientes</span><strong id="countPending">0</strong></div>
       <div class="stat"><span>Aceptadas</span><strong id="countAccepted">0</strong></div>
@@ -67,6 +68,18 @@
       </div>
     </div>
     <nav id="applicationStatusTabs" class="tabs" style="display:flex;gap:8px;flex-wrap:wrap;margin:14px 0"><button class="btn tab primary" data-status="pending">Pendientes</button><button class="btn tab" data-status="accepted">Aceptadas</button><button class="btn tab" data-status="rejected">Rechazadas</button></nav>
+
+    <section id="rankRequestsView" class="hidden">
+      <section class="intro"><h2>Solicitudes de rango</h2><p>UCOP comprueba la entrevista y la autorización indicada. Al aprobar, asigna el rol de Policía y el rango solicitado y actualiza la ficha de personal.</p></section>
+      <section class="stats">
+        <div class="stat"><span>Pendientes</span><strong id="rankRequestPendingCount">0</strong></div>
+        <div class="stat"><span>Aprobadas</span><strong id="rankRequestAcceptedCount">0</strong></div>
+        <div class="stat"><span>Rechazadas</span><strong id="rankRequestRejectedCount">0</strong></div>
+      </section>
+      <div class="toolbar"><h2 id="rankRequestListTitle">Solicitudes pendientes</h2><div style="display:flex;gap:8px;flex:1;justify-content:flex-end;flex-wrap:wrap"><input id="rankRequestSearch" class="search" type="search" placeholder="Buscar personaje, placa, rango o usuario…"><button id="refreshRankRequests" class="btn" type="button">Actualizar</button></div></div>
+      <nav id="rankRequestStatusTabs" class="tabs" style="display:flex;gap:8px;flex-wrap:wrap;margin:14px 0"><button class="btn tab primary" data-rank-status="pending">Pendientes</button><button class="btn tab" data-rank-status="accepted">Aprobadas</button><button class="btn tab" data-rank-status="rejected">Rechazadas</button></nav>
+      <div id="rankRequestList" class="candidate-list"><div class="empty">Carga las solicitudes de rango.</div></div>
+    </section>
 
     <section id="personnelView" class="hidden">
       <div class="panel">
@@ -134,8 +147,10 @@
 const API_BASE = "https://ngkmylqsdeevdtrjrgfn.supabase.co/functions/v1/prime-police-panel";
 const TOKEN_KEY = "primePolicePanelSession";
 let activeStatus = "pending";
+let activeRankRequestStatus = "pending";
 let token = sessionStorage.getItem(TOKEN_KEY) || "";
 let applications = [];
+let rankRequests = [];
 let personnel = [];
 let rankRoles = [];
 let availableRoles = [];
@@ -167,7 +182,7 @@ async function request(action, options) {
   const headers = {"Content-Type":"application/json"};
   if (token && action !== "login") headers.Authorization = "Bearer " + token;
   const response = await fetch(API_BASE + "?panel=" + encodeURIComponent(action), {
-    method: options.method || (["data","personnel","rank-config","rank-history","sanctions"].includes(action) ? "GET" : "POST"),
+    method: options.method || (["data","personnel","rank-config","rank-history","rank-requests","sanctions"].includes(action) ? "GET" : "POST"),
     headers,
     body: options.body ? JSON.stringify(options.body) : undefined
   });
@@ -197,7 +212,7 @@ function badgeFor(app) {
   const badge = document.createElement("span");
   const retry = app.status === "accepted" && !app.role_assigned_at;
   badge.className = "badge " + (app.status === "pending" ? "pending" : app.status === "accepted" ? "accepted" : "rejected");
-  badge.textContent = app.status === "pending" ? "Pendiente" : app.status === "accepted" ? (retry ? "Aceptada · rol pendiente" : "Aceptada · rol asignado") : "Rechazada";
+  badge.textContent = app.status === "pending" ? "Pendiente" : app.status === "accepted" ? (retry ? "Aceptada · Preselección pendiente" : "Aceptada · Preselección") : "Rechazada";
   return badge;
 }
 function decisionButton(label, action, className, app) {
@@ -247,11 +262,11 @@ function renderApplications() {
     grid.append(
       detail("Fecha de solicitud", niceDate(app.created_at)),
       detail("Intento de postulación", String(app.attempt_number || 1) + " / 3"),
-      detail(isRoleplayForm ? "Ficha del personaje (IC)" : "Datos IC / OOC / edad / Discord", a.character_info || a.personal || app.full_name),
-      detail(isRoleplayForm ? "Motivación, virtudes y mejoras" : "Experiencia previa y tiempo en RolePlay", a.motivation || a.experience_time || app.previous_experience),
-      detail(isRoleplayForm ? "Fuerza y órdenes" : "Meta dentro de la Policía y preferencia PVP / RolePlay", a.detention_rights || a.control_scenario || a.goal_preference),
+      detail(isRoleplayForm ? "Nombre y edad (IC)" : "Datos IC / OOC / edad / Discord", a.character_info || a.personal || app.full_name),
+      detail(isRoleplayForm ? "Motivación y mejora personal" : "Experiencia previa y tiempo en RolePlay", a.motivation || a.experience_time || app.previous_experience),
+      detail(isRoleplayForm ? "Responsabilidad y órdenes" : "Meta dentro de la Policía y preferencia PVP / RolePlay", a.detention_rights || a.control_scenario || a.goal_preference),
       detail(isRoleplayForm ? "Mala praxis o corrupción" : "Expectativas y motivo para unirse", a.scene_resolution || a.emergency_scenario || a.team_scenario || a.expectations_why || app.motivation),
-      detail(isRoleplayForm ? "Casos prácticos 1 y 2" : "Acepta las normativas de PRIME POLICE", a.roleplay_response || a.availability_rules || a.rules_accepted),
+      detail(isRoleplayForm ? "Situaciones policiales" : "Acepta las normativas de PRIME POLICE", a.roleplay_response || a.availability_rules || a.rules_accepted),
       detail("Motivo de decisión", app.decision_reason)
     );
     const actions = document.createElement("div");
@@ -259,7 +274,7 @@ function renderApplications() {
     const pending = app.status === "pending";
     const retryRole = app.status === "accepted" && !app.role_assigned_at;
     if (pending || retryRole) {
-      actions.append(decisionButton(retryRole ? "Reintentar asignación del rol" : "Aceptar y asignar rol", "accept", "accept", app));
+      actions.append(decisionButton(retryRole ? "Reintentar asignación de Preselección" : "Aceptar y asignar Preselección", "accept", "accept", app));
       if (pending) actions.append(decisionButton("Rechazar", "reject", "reject", app));
     } else {
       const done = document.createElement("span");
@@ -297,8 +312,54 @@ async function loadApplications() {
     $("refreshButton").textContent = "Actualizar";
   }
 }
+function renderRankRequests() {
+  const list=$("rankRequestList");list.replaceChildren();
+  const query=$("rankRequestSearch").value.trim().toLocaleLowerCase("es");
+  const visible=rankRequests.filter(item=>item.status===activeRankRequestStatus&&[item.character_name,item.plate,item.requested_rank_name,item.approved_by_name,item.discord_username,item.discord_user_id].join(" ").toLocaleLowerCase("es").includes(query));
+  $("rankRequestPendingCount").textContent=rankRequests.filter(x=>x.status==="pending").length;
+  $("rankRequestAcceptedCount").textContent=rankRequests.filter(x=>x.status==="accepted").length;
+  $("rankRequestRejectedCount").textContent=rankRequests.filter(x=>x.status==="rejected").length;
+  $("rankRequestListTitle").textContent=activeRankRequestStatus==="pending"?"Solicitudes pendientes":activeRankRequestStatus==="accepted"?"Solicitudes aprobadas":"Solicitudes rechazadas";
+  document.querySelectorAll("#rankRequestStatusTabs .tab").forEach(button=>button.classList.toggle("active",button.dataset.rankStatus===activeRankRequestStatus));
+  if(!visible.length){const empty=document.createElement("div");empty.className="empty";empty.textContent=rankRequests.some(x=>x.status===activeRankRequestStatus)?"No hay coincidencias para esa búsqueda.":activeRankRequestStatus==="pending"?"No hay solicitudes pendientes.":activeRankRequestStatus==="accepted"?"Todavía no hay solicitudes aprobadas.":"Todavía no hay solicitudes rechazadas.";list.append(empty);return;}
+  visible.forEach(item=>{
+    const card=document.createElement("article");card.className="candidate";
+    const head=document.createElement("div");head.className="candidate-head";
+    const identity=document.createElement("div"),title=document.createElement("h3"),sub=document.createElement("div");
+    title.textContent=(item.character_name||"Agente")+" · "+(item.requested_rank_name||"Rango sin indicar");
+    sub.className="muted";sub.textContent=(item.discord_username||"Usuario de Discord")+" · Placa "+(item.plate||"—")+" · ID "+(item.discord_user_id||"—");
+    identity.append(title,sub);
+    const badge=document.createElement("span");badge.className="badge "+(item.status==="pending"?"pending":item.status==="accepted"?"accepted":"rejected");badge.textContent=item.status==="pending"?"Pendiente":item.status==="accepted"?"Aprobada · Policía y rango":"Rechazada";
+    head.append(identity,badge);
+    const grid=document.createElement("div");grid.className="details";
+    grid.append(detail("Aprobado por",item.approved_by_name),detail("Fecha de solicitud",niceDate(item.created_at)));
+    if(item.reviewed_by_name)grid.append(detail("Revisado por UCOP",item.reviewed_by_name),detail("Fecha de revisión",niceDate(item.reviewed_at)));
+    if(item.review_reason)grid.append(detail("Observación",item.review_reason));
+    const actions=document.createElement("div");actions.className="candidate-actions";
+    if(item.status==="pending"){
+      const accept=document.createElement("button");accept.type="button";accept.className="btn accept";accept.textContent="Aprobar y asignar Policía + rango";accept.addEventListener("click",()=>reviewRankRequest(item,"accept",accept));
+      const reject=document.createElement("button");reject.type="button";reject.className="btn reject";reject.textContent="Rechazar";reject.addEventListener("click",()=>reviewRankRequest(item,"reject",reject));actions.append(accept,reject);
+    }else{
+      const result=document.createElement("span");result.className="muted";result.textContent=item.status==="accepted"?"El rango solicitado fue aplicado en Discord y en la ficha UCOP.":"Solicitud revisada por UCOP.";actions.append(result);
+    }
+    card.append(head,grid,actions);list.append(card);
+  });
+}
+async function loadRankRequests() {
+  const list=$("rankRequestList");list.replaceChildren();const loading=document.createElement("div");loading.className="empty";loading.textContent="Cargando solicitudes de rango…";list.append(loading);
+  try{const result=await request("rank-requests");rankRequests=result.requests||[];renderRankRequests();}
+  catch(error){list.replaceChildren();const empty=document.createElement("div");empty.className="empty";empty.textContent=error.message;list.append(empty);}
+}
+async function reviewRankRequest(item,decision,button) {
+  const verb=decision==="accept"?"aprobar y asignar el rol de Policía y el rango":"rechazar";
+  if(!confirm("¿Confirmas "+verb+" a "+item.character_name+" ("+item.plate+") con el rango "+item.requested_rank_name+"? UCOP debe comprobar la entrevista IC y el nombre indicado en «Aprobado por»."))return;
+  const reason=decision==="reject"?(prompt("Observación del rechazo (opcional):","")||""):"";
+  button.disabled=true;button.textContent="Procesando…";
+  try{const result=await request("rank-request-review",{method:"POST",body:{id:item.id,decision,reason}});showToast(result.message||"Solicitud revisada.");await Promise.all([loadRankRequests(),loadPersonnel()]);}
+  catch(error){showToast(error.message);button.disabled=false;button.textContent=decision==="accept"?"Aprobar y asignar Policía + rango":"Rechazar";}
+}
 async function decide(app, action, button) {
-  if (action === "accept" && !confirm("¿Aceptar a " + app.full_name + " y asignarle el rol de Policía en Discord?")) return;
+  if (action === "accept" && !confirm("¿Aceptar a " + app.full_name + " y asignarle el rol Preselección en Discord? El rol de Policía se asignará después de la entrevista, al aprobar su solicitud de rango.")) return;
   let reason = "";
   if (action === "reject") {
     if (!confirm("¿Rechazar la candidatura de " + app.full_name + "?")) return;
@@ -310,7 +371,7 @@ async function decide(app, action, button) {
   try {
     const result = await request("decision", {method:"POST",body:{id:app.id,action,reason}});
     if (result.warning) showToast(result.warning);
-    else showToast(action === "accept" ? "Candidatura aceptada y rol de Policía asignado." : "Candidatura rechazada y reflejada en Discord.");
+    else showToast(action === "accept" ? "Candidatura aceptada y rol Preselección asignado." : "Candidatura rechazada y reflejada en Discord.");
     await loadApplications();
   } catch (error) {
     showToast(error.message);
@@ -372,7 +433,11 @@ $("sanctionForm").addEventListener("submit", async event => {
   finally { button.disabled=false; button.textContent="Registrar sanción"; }
 });
 $("refreshSanctions").addEventListener("click",loadSanctions);
-document.querySelectorAll(".workspace-tab").forEach(button=>button.addEventListener("click",()=>{const view=button.dataset.view,apps=view==="applications",sanctions=view==="sanctions",staff=view==="personnel",ranks=view==="ranks";$("sanctionsView").classList.toggle("hidden",!sanctions);$("personnelView").classList.toggle("hidden",!staff);$("rankView").classList.toggle("hidden",!ranks);["applicationStats","applicationsToolbar","applicationStatusTabs"].forEach(id=>$(id).classList.toggle("hidden",!apps));$("candidateList").classList.toggle("hidden",!apps);document.querySelectorAll(".workspace-tab").forEach(b=>b.classList.toggle("active",b===button));$("workspaceTitle").textContent=button.dataset.title||button.textContent.trim();if(sanctions)loadSanctions();if(staff){loadPersonnel();loadRankConfig();}if(ranks){loadRankConfig();loadPersonnel();loadRankHistory();}}));$("loginForm").addEventListener("submit", async event => {
+document.querySelectorAll("#rankRequestStatusTabs .tab").forEach(button=>button.addEventListener("click",()=>{activeRankRequestStatus=button.dataset.rankStatus;renderRankRequests();}));
+document.querySelectorAll("#applicationStatusTabs .tab").forEach(button=>button.addEventListener("click",()=>{activeStatus=button.dataset.status;renderApplications();}));
+$("rankRequestSearch").addEventListener("input",renderRankRequests);
+$("refreshRankRequests").addEventListener("click",loadRankRequests);
+document.querySelectorAll(".workspace-tab").forEach(button=>button.addEventListener("click",()=>{const view=button.dataset.view,apps=view==="applications",rankReq=view==="rank-requests",sanctions=view==="sanctions",staff=view==="personnel",ranks=view==="ranks";$("sanctionsView").classList.toggle("hidden",!sanctions);$("rankRequestsView").classList.toggle("hidden",!rankReq);$("personnelView").classList.toggle("hidden",!staff);$("rankView").classList.toggle("hidden",!ranks);["applicationsIntro","applicationStats","applicationsToolbar","applicationStatusTabs"].forEach(id=>$(id).classList.toggle("hidden",!apps));$("candidateList").classList.toggle("hidden",!apps);document.querySelectorAll(".workspace-tab").forEach(b=>b.classList.toggle("active",b===button));$("workspaceTitle").textContent=button.dataset.title||button.textContent.trim();if(apps)loadApplications();if(rankReq)loadRankRequests();if(sanctions)loadSanctions();if(staff){loadPersonnel();loadRankConfig();}if(ranks){loadRankConfig();loadPersonnel();loadRankHistory();}}));$("loginForm").addEventListener("submit", async event => {
   event.preventDefault();
   $("loginError").textContent = "";
   $("loginButton").disabled = true;
@@ -395,7 +460,6 @@ $("loginCode").addEventListener("input", event => { event.target.value = event.t
 $("refreshButton").addEventListener("click", loadApplications);
 $("logoutButton").addEventListener("click", () => { showLogin(); $("loginError").textContent = ""; showToast("Sesión cerrada."); });
 $("search").addEventListener("input", () => renderApplications());
-document.querySelectorAll(".tab").forEach(button => button.addEventListener("click", () => { activeStatus = button.dataset.status; renderApplications(); }));
 
 const pageUrl = new URL(window.location.href);
 const codeFromUrl = pageUrl.searchParams.get("code");

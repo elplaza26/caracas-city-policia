@@ -5,6 +5,7 @@ const GUILD_ID = "1539970134469378068";
 const APPLICATION_CHANNEL_ID = "1539970136683847857";
 const RESULTS_CHANNEL_ID = "1564350390294552696";
 const POLICE_ROLE_ID = "1539970134482092038";
+const PRESELECTION_ROLE_ID = "1564685481457877012";
 const APPLICATION_ID = "1540484542354428025";
 const BOT_TOKEN = Deno.env.get("DISCORD_BOT_TOKEN") ?? "";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
@@ -59,7 +60,7 @@ async function ensureSlashCommands() {
   const path = "/applications/" + APPLICATION_ID + "/guilds/" + GUILD_ID + "/commands";
   const desired = [
     { name: "postulacion", description: "Información sobre cómo postularte a PRIME POLICE" },
-    { name: "publicar_postulaciones", description: "Publicar las postulaciones de PRIME POLICE" },
+    { name: "publicar_postulaciones", description: "Actualizar paneles de postulación y rango UCOP" },
     { name: "panel_codigo", description: "Generar un código temporal para entrar al panel policial" },
   ];
   const existing = await discord(path) as any[];
@@ -225,14 +226,14 @@ async function decide(req: Request) {
       try {
         await discord(
           "/guilds/" + GUILD_ID + "/members/" + encodeURIComponent(app.discord_user_id) +
-          "/roles/" + POLICE_ROLE_ID,
+          "/roles/" + PRESELECTION_ROLE_ID,
           { method: "PUT", body: JSON.stringify({}) },
         );
       } catch (e) {
         const detail = String(e);
         console.error("Panel role assignment error:", detail);
         if (detail.includes("403") || detail.includes("50013")) {
-          return json({ error: "Discord ha denegado el rol. El bot necesita Administrar roles y su rol debe estar por encima de Policía." }, 502);
+          return json({ error: "Discord ha denegado el rol. El bot necesita Administrar roles y su rol debe estar por encima de Preselección." }, 502);
         }
         if (detail.includes("404") || detail.includes("10007")) {
           return json({ error: "No se encontró al usuario en el servidor. Comprueba su ID y que siga dentro de Discord." }, 502);
@@ -286,7 +287,7 @@ async function decide(req: Request) {
     return json({ error: "No se pudo guardar la decisión en la base de datos." }, 500);
   }
 
-  const statusText = action === "accept" ? "✅ Aceptada · rol de Policía asignado" : "❌ No seleccionada";
+      const statusText = action === "accept" ? "✅ Aceptada · rol de Preselección asignado" : "❌ No seleccionada";
   const content = "📋 **Postulación revisada**\n" +
     "**Candidato:** <@" + String(app.discord_user_id) + ">\n" +
     "**Estado:** " + statusText + "\n" +
@@ -362,7 +363,7 @@ async function decide(req: Request) {
     const remaining = Math.max(0, 3 - attempt);
     const accepted = action === "accept";
     const description = accepted
-      ? "¡Enhorabuena! Tu postulación ha sido aceptada. Ya tienes el rol <@&" + POLICE_ROLE_ID + ">. Te damos la bienvenida a PRIME POLICE; el equipo te indicará los siguientes pasos."
+      ? "¡Enhorabuena! UCOP ha aceptado tu postulación y se te ha asignado el rol <@&" + PRESELECTION_ROLE_ID + ">. Con ese rol, UCOP coordinará contigo una entrevista IC. Después de aprobarla, usa «Solicitar rango» en <#1539970135375478859>; al aprobar UCOP tu solicitud, se te asignarán el rol de Policía y el rango."
       : remaining > 0
         ? "Gracias por tu tiempo y por querer formar parte de PRIME POLICE. En esta ocasión no has sido seleccionado. No te desanimes: puedes prepararte y volver a intentarlo. Te quedan **" + remaining + " de 3 intentos**."
         : "Gracias por tu esfuerzo y por postularte a PRIME POLICE. En esta ocasión no has sido seleccionado. Has utilizado tus **3 de 3 intentos**, así que no podrás enviar otra postulación. Te animamos a seguir participando en la comunidad y te deseamos lo mejor.";
@@ -372,7 +373,7 @@ async function decide(req: Request) {
         body: JSON.stringify({
           content: "<@" + String(app.discord_user_id) + ">",
           embeds: [{ title: accepted ? "🎉 Resultado de postulación · Aceptada" : "📋 Resultado de postulación · PRIME POLICE", description, color: accepted ? 0x45b879 : 0xd5ad5a, footer: { text: "PRIME POLICE · Reclutamiento · Intento " + attempt + "/3" } }],
-          allowed_mentions: { parse: [], users: [String(app.discord_user_id)], roles: accepted ? [POLICE_ROLE_ID] : [] },
+          allowed_mentions: { parse: [], users: [String(app.discord_user_id)], roles: accepted ? [PRESELECTION_ROLE_ID] : [] },
         }),
       });
       resultsNotified = true;
