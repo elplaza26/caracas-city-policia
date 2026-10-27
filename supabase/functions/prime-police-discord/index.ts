@@ -24,11 +24,11 @@ const response=(type:number,data:any)=>json({type,data});
 const ephemeral=(content:string)=>response(4,{content,flags:64});
 const input=(id:string,label:string,placeholder:string,required=true,style=2)=>({type:4,custom_id:id,label,style,placeholder,min_length:1,max_length:style===1?100:1000,required});
 function modal(){return response(9,{custom_id:"prime_application_submit",title:"Postulación · PRIME POLICE",components:[
- {type:1,components:[input("character_info","Historia del personaje","Nombre IC: ... | Edad IC: ... | Historia breve: ...")]},
- {type:1,components:[input("motivation","Motivación y perfil","¿Por qué quieres entrar? Di una fortaleza y algo que quieras mejorar.")]},
- {type:1,components:[input("detention_rights","Detención y derechos","Llevas a una persona detenida a comisaría: ¿qué derechos le lees y cuándo, según la normativa?")]},
- {type:1,components:[input("scene_resolution","Escena de roleplay","Una escena se tensa entre varios personajes. ¿Cómo ayudas a resolverla sin imponer el resultado?")]},
- {type:1,components:[input("roleplay_response","Uso de /me y /do","Otro personaje provoca al tuyo. Escribe una respuesta con /me y /do que mantenga la escena sin escalarla.")]}
+ {type:1,components:[input("character_info","Ficha del personaje (IC)","Nombre IC: nombre y apellidos | Edad IC: ... | Historial: limpio o antecedentes activos.")]},
+ {type:1,components:[input("motivation","Motivación, virtudes y mejoras","¿Qué aportarías? Indica 2 virtudes y 2 debilidades o aspectos que tu personaje debe mejorar.")]},
+ {type:1,components:[input("detention_rights","Fuerza y órdenes","Explica la fuerza proporcional, cuándo usarías un arma y qué harías ante una orden ilegal.")]},
+ {type:1,components:[input("scene_resolution","Mala praxis o corrupción","Si presencias mala praxis o corrupción de otro agente, ¿cómo actuarías y a quién informarías?")]},
+ {type:1,components:[input("roleplay_response","Casos prácticos 1 y 2","Responde por separado: 1) llegas solo a varios vehículos sospechosos, ¿qué haces primero? 2) ciudadano hostil: redacta con /me y /do.")]}
 ]})}
 function values(interaction:any){const out:any={};for(const row of interaction.data?.components||[])for(const c of row.components||[])out[c.custom_id]=String(c.value||"").trim();return out}
 async function handle(i:any){
@@ -63,7 +63,7 @@ async function handle(i:any){
   if(!submitted?.ok)return ephemeral(String(submitted?.message||"No se pudo aceptar la postulación."));
   const app=submitted.application;
 
-  const embed={title:"📋 Nueva postulación · PRIME POLICE",description:"**Solicitante:** <@"+userId+">\n**Intento:** "+submitted.attempt_number+" de 3",fields:[{name:"Historia del personaje",value:personal.slice(0,1000)},{name:"Motivación y aporte",value:a.motivation.slice(0,1000)},{name:"Detención y derechos",value:a.detention_rights.slice(0,1000)},{name:"Escena de roleplay",value:a.scene_resolution.slice(0,1000)},{name:"Uso de /me y /do",value:a.roleplay_response.slice(0,1000)}],color:14264415,footer:{text:"ID: "+String(app.id)+" · Intento "+submitted.attempt_number+"/3 · Revisar desde el panel web"}};
+  const embed={title:"📋 Nueva postulación · PRIME POLICE",description:"**Solicitante:** <@"+userId+">\n**Intento:** "+submitted.attempt_number+" de 3",fields:[{name:"Ficha del personaje (IC)",value:personal.slice(0,1000)},{name:"Motivación, virtudes y mejoras",value:a.motivation.slice(0,1000)},{name:"Fuerza y órdenes",value:a.detention_rights.slice(0,1000)},{name:"Mala praxis o corrupción",value:a.scene_resolution.slice(0,1000)},{name:"Casos prácticos 1 y 2",value:a.roleplay_response.slice(0,1000)}],color:14264415,footer:{text:"ID: "+String(app.id)+" · Intento "+submitted.attempt_number+"/3 · Revisar desde el panel web"}};
   try{const posted=await discord("/channels/"+APPLICATION_CHANNEL_ID+"/messages",{method:"POST",body:JSON.stringify({embeds:[embed]})}) as any;if(posted?.id)await db("police_applications?id=eq."+encodeURIComponent(String(app.id)),{method:"PATCH",body:JSON.stringify({discord_message_id:String(posted.id)})});}
   catch(error){console.error("Could not publish application intake message:",String(error));return ephemeral("Tu postulación quedó guardada, pero no se pudo publicar el aviso en el canal. Contacta con un administrador para confirmar su recepción.");}
   return ephemeral("¡Postulación recibida! Este es tu intento "+submitted.attempt_number+" de 3. El equipo de PRIME POLICE la revisará y comunicará el resultado en el canal correspondiente.");
