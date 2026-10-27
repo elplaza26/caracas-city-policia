@@ -24,11 +24,11 @@ const response=(type:number,data:any)=>json({type,data});
 const ephemeral=(content:string)=>response(4,{content,flags:64});
 const input=(id:string,label:string,placeholder:string,required=true,style=2)=>({type:4,custom_id:id,label,style,placeholder,min_length:1,max_length:style===1?100:1000,required});
 function modal(){return response(9,{custom_id:"prime_application_submit",title:"Postulación · PRIME POLICE",components:[
- {type:1,components:[input("character_info","Datos del personaje","Nombre IC: ... | Edad IC: ... | Historia: ...")]},
- {type:1,components:[input("motivation","Motivación","¿Por qué quiere entrar tu personaje?")]},
- {type:1,components:[input("control_scenario","Situación policial","El conductor no obedece. ¿Qué hace tu personaje?")]},
- {type:1,components:[input("team_scenario","Trabajo en equipo","Un agente incumple una norma. ¿Qué hace tu personaje?")]},
- {type:1,components:[input("availability_rules","Horario y normas","¿Qué horarios tienes? ¿Aceptas las normas? Escribe ACEPTO.")]}
+ {type:1,components:[input("character_info","Historia del personaje","Nombre IC: ... | Edad IC: ... | Historia breve: ...")]},
+ {type:1,components:[input("motivation","Motivación y aporte","¿Por qué quieres entrar a PRIME POLICE y qué aportaría tu personaje al cuerpo?")]},
+ {type:1,components:[input("control_scenario","Situación policial","En un control, el conductor huye. ¿Cómo actúa paso a paso siguiendo el protocolo?")]},
+ {type:1,components:[input("team_scenario","Trabajo en equipo","Un compañero se salta el protocolo. ¿Cómo reaccionas en rol y cómo lo reportas luego?")]},
+ {type:1,components:[input("availability_rules","Disponibilidad y normativa","¿Qué disponibilidad semanal tienes? ¿Leíste y aceptas las normas policiales y de rol?")]}
 ]})}
 function values(interaction:any){const out:any={};for(const row of interaction.data?.components||[])for(const c of row.components||[])out[c.custom_id]=String(c.value||"").trim();return out}
 async function handle(i:any){
@@ -63,7 +63,7 @@ async function handle(i:any){
   if(!submitted?.ok)return ephemeral(String(submitted?.message||"No se pudo aceptar la postulación."));
   const app=submitted.application;
 
-  const embed={title:"📋 Nueva postulación · PRIME POLICE",description:"**Solicitante:** <@"+userId+">\n**Intento:** "+submitted.attempt_number+" de 3",fields:[{name:"Datos del personaje",value:personal.slice(0,1000)},{name:"Motivación",value:a.motivation.slice(0,1000)},{name:"Situación policial",value:a.control_scenario.slice(0,1000)},{name:"Trabajo en equipo",value:a.team_scenario.slice(0,1000)},{name:"Horario y normas",value:a.availability_rules.slice(0,1000)}],color:14264415,footer:{text:"ID: "+String(app.id)+" · Intento "+submitted.attempt_number+"/3 · Revisar desde el panel web"}};
+  const embed={title:"📋 Nueva postulación · PRIME POLICE",description:"**Solicitante:** <@"+userId+">\n**Intento:** "+submitted.attempt_number+" de 3",fields:[{name:"Historia del personaje",value:personal.slice(0,1000)},{name:"Motivación y aporte",value:a.motivation.slice(0,1000)},{name:"Situación policial",value:a.control_scenario.slice(0,1000)},{name:"Trabajo en equipo",value:a.team_scenario.slice(0,1000)},{name:"Disponibilidad y normativa",value:a.availability_rules.slice(0,1000)}],color:14264415,footer:{text:"ID: "+String(app.id)+" · Intento "+submitted.attempt_number+"/3 · Revisar desde el panel web"}};
   try{const posted=await discord("/channels/"+APPLICATION_CHANNEL_ID+"/messages",{method:"POST",body:JSON.stringify({embeds:[embed]})}) as any;if(posted?.id)await db("police_applications?id=eq."+encodeURIComponent(String(app.id)),{method:"PATCH",body:JSON.stringify({discord_message_id:String(posted.id)})});}
   catch(error){console.error("Could not publish application intake message:",String(error));return ephemeral("Tu postulación quedó guardada, pero no se pudo publicar el aviso en el canal. Contacta con un administrador para confirmar su recepción.");}
   return ephemeral("¡Postulación recibida! Este es tu intento "+submitted.attempt_number+" de 3. El equipo de PRIME POLICE la revisará y comunicará el resultado en el canal correspondiente.");
