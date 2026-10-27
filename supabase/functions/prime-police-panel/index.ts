@@ -549,6 +549,7 @@ Deno.serve(async (req: Request) => {
   if (action === "decision" && req.method === "POST") return await decide(req);
   if (action === "sanctions" && req.method === "GET") return await listSanctions(req);
   if (action === "sanction" && req.method === "POST") return await createSanction(req);
+  if (action === "sanction-delete" && req.method === "POST") return await deleteSanction(req);
   const hrResponse = await handleHr(req, action ?? "");
   if (hrResponse) return hrResponse;
   if (action) return json({ error: "Acción de panel no reconocida." }, 404);
@@ -651,10 +652,15 @@ async function createSanction(req: Request) {
   const targetId = String(body?.discord_user_id ?? "").trim();
   const actionType = String(body?.action_type ?? "");
   const reason = String(body?.reason ?? "").trim().slice(0, 1000);
+  const evidenceUrl = String(body?.evidence_url ?? "").trim().slice(0, 500);
   const targetName = String(body?.target_name ?? "").trim().slice(0, 100);
   const plate = String(body?.plate ?? "").trim().slice(0, 30);
   if (!/^\d{17,20}$/.test(targetId) || !["warning", "strike"].includes(actionType) || reason.length < 3) {
     return json({ error: "Indica un ID de Discord válido, tipo y motivo (mínimo 3 caracteres)." }, 400);
+  }
+  if (evidenceUrl) {
+    try { const url = new URL(evidenceUrl); if (!["https:", "http:"].includes(url.protocol)) throw new Error(); }
+    catch { return json({ error: "La evidencia debe ser un enlace http o https válido." }, 400); }
   }
   let member: any;
   let inserted: any;
@@ -665,6 +671,8 @@ async function createSanction(req: Request) {
     const roles: string[] = member.roles ?? [];
     if (!roles.includes(POLICE_ROLE_ID)) return json({ error: "La persona no tiene el rol Policía." }, 409);
     if (roles.includes(EXPELLED_ROLE_ID)) return json({ error: "La persona ya tiene el rol de expulsado." }, 409);
+    let issuerName = issuerId;
+    try { const issuer = await discord("/guilds/" + GUILD_ID + "/members/" + issuerId) as any; issuerName = String(issuer.nick || issuer.user?.global_name || issuer.user?.username || issuerId); } catch { /* use ID fallback */ }
     const tierRoles = actionType === "warning" ? WARN_ROLE_IDS : STRIKE_ROLE_IDS;
     const existingRoleLevel = Math.max(0, ...tierRoles.map((id, index) => roles.includes(id) ? index + 1 : 0));
     const prior = await db("police_sanctions?select=level&discord_user_id=eq." + targetId + "&action_type=eq." + actionType + "&active=eq.true&order=level.desc&limit=1");
@@ -674,8 +682,8 @@ async function createSanction(req: Request) {
     const name = String(member.user?.global_name || member.user?.username || targetId);
     const created = await db("police_sanctions", { method: "POST", body: JSON.stringify({
       discord_user_id: targetId, discord_username: name, target_name: targetName, plate,
-      action_type: actionType, level, reason, issuer_discord_id: issuerId,
-      issuer_name: "<@" + issuerId + ">", status: "pending", active: false,
+      action_type: actionType, level, reason, evidence_url: evidenceUrl, issuer_discord_id: issuerId,
+      issuer_name: issuerName, status: "pending", active: false,
     }) });
     inserted = created?.[0];
     if (!inserted?.id) throw new Error("Sanction row was not created");
@@ -702,6 +710,7 @@ async function createSanction(req: Request) {
         { name: "Oficial sancionado", value: "<@" + targetId + ">" + (targetName ? " · " + targetName : "") + (plate ? " · Placa " + plate : ""), inline: false },
         { name: "Registrado por", value: "<@" + issuerId + ">", inline: true },
         { name: "Motivo", value: reason, inline: false },
+        ...(evidenceUrl ? [{ name: "Evidencia", value: "[Abrir evidencia](" + evidenceUrl + ")", inline: false }] : []),
         { name: "Tipo de acción", value: label + " " + level, inline: true },
         { name: "Amonestaciones activas", value: String(warnings), inline: true },
         { name: "Strikes activos", value: String(strikes), inline: true },
@@ -725,5 +734,68 @@ async function createSanction(req: Request) {
       try { await db("police_sanctions?id=eq." + encodeURIComponent(inserted.id), { method: "PATCH", body: JSON.stringify({ status: "failed", active: false, failure_reason: String(e).slice(0, 500) }) }); } catch { /* preserve original failure */ }
     }
     return json({ error: "No se pudo completar la sanción. Revisa permisos y jerarquía de roles del bot." }, 502);
+  }
+}
+
+async function deleteSanction(req: Request) {
+  const issuerId = await authorizedUser(req);
+  if (!issuerId) return json({ error: "No tienes un rol autorizado para gestionar sanciones." }, 403);
+  let body: any; try { body = await req.json(); } catch { return json({ error: "Solicitud inválida." }, 400); }
+  const id = String(body?.id ?? "").trim();
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return json({ error: "El identificador de sanción no es válido." }, 400);
+  try {
+    const found = await db("police_sanctions?select=*&id=eq." + encodeURIComponent(id) + "&limit=1");
+    const sanction = found?.[0];
+    if (!sanction) return json({ error: "La sanción ya no existe." }, 404);
+    const personnel = await db("police_personnel?select=discord_user_id&discord_user_id=eq." + encodeURIComponent(String(sanction.discord_user_id)) + "&unit=eq.UCOP&limit=1");
+    if (!personnel?.length) return json({ error: "El registro no pertenece a personal UCOP." }, 409);
+    const targetId = String(sanction.discord_user_id);
+    const member = await discord("/guilds/" + GUILD_ID + "/members/" + encodeURIComponent(targetId)) as any;
+    const memberRoles: string[] = member.roles ?? [];
+    const tierRoles = sanction.action_type === "warning" ? WARN_ROLE_IDS : STRIKE_ROLE_IDS;
+    const activeRows = await db("police_sanctions?select=id,level,created_at&discord_user_id=eq." + encodeURIComponent(targetId) + "&action_type=eq." + encodeURIComponent(String(sanction.action_type)) + "&status=eq.active&active=eq.true&order=level.desc");
+    if (sanction.status === "active" && activeRows?.[0]?.id !== sanction.id) {
+      return json({ error: "Para conservar la secuencia, elimina primero la sanción activa más reciente de este tipo." }, 409);
+    }
+    const remaining = (activeRows ?? []).filter((row: any) => row.id !== sanction.id);
+    const highest = remaining.reduce((value: number, row: any) => Math.max(value, Number(row.level) || 0), 0);
+    const affectedRoles = [...tierRoles, EXPELLED_ROLE_ID, POLICE_ROLE_ID];
+    const oldRoleState = new Set(memberRoles);
+    try {
+      for (const roleId of tierRoles) if (memberRoles.includes(roleId)) await discord("/guilds/" + GUILD_ID + "/members/" + targetId + "/roles/" + roleId, { method: "DELETE" });
+      if (highest > 0 && highest <= 3) await discord("/guilds/" + GUILD_ID + "/members/" + targetId + "/roles/" + tierRoles[highest - 1], { method: "PUT", body: "{}" });
+      if (sanction.status === "active" && sanction.action_type === "strike" && Number(sanction.level) === 3 && highest < 3 && memberRoles.includes(EXPELLED_ROLE_ID)) {
+        await discord("/guilds/" + GUILD_ID + "/members/" + targetId + "/roles/" + EXPELLED_ROLE_ID, { method: "DELETE" });
+        if (!memberRoles.includes(POLICE_ROLE_ID)) await discord("/guilds/" + GUILD_ID + "/members/" + targetId + "/roles/" + POLICE_ROLE_ID, { method: "PUT", body: "{}" });
+      }
+      const deleted = await db("police_sanctions?id=eq." + encodeURIComponent(id), { method: "DELETE" });
+      if (Array.isArray(deleted) && !deleted.length) throw new Error("Sanction record was not deleted");
+    } catch (error) {
+      try {
+        for (const roleId of affectedRoles) {
+          if (oldRoleState.has(roleId)) await discord("/guilds/" + GUILD_ID + "/members/" + targetId + "/roles/" + roleId, { method: "PUT", body: "{}" });
+          else await discord("/guilds/" + GUILD_ID + "/members/" + targetId + "/roles/" + roleId, { method: "DELETE" });
+        }
+      } catch (rollbackError) { console.error("Sanction deletion rollback failed:", String(rollbackError)); }
+      throw error;
+    }
+    if (sanction.discord_message_id) {
+      const channelId = sanction.action_type === "warning" ? WARNING_CHANNEL_ID : STRIKE_CHANNEL_ID;
+      try { await discord("/channels/" + channelId + "/messages/" + encodeURIComponent(String(sanction.discord_message_id)), { method: "DELETE" }); }
+      catch (error) { console.error("Deleted sanction announcement could not be removed:", String(error)); }
+    }
+    let issuerName = issuerId;
+    try { const actor = await discord("/guilds/" + GUILD_ID + "/members/" + issuerId) as any; issuerName = String(actor.nick || actor.user?.global_name || actor.user?.username || issuerId); } catch { /* use ID fallback */ }
+    await postAuditLog("🗑️ Sanción eliminada", 0x7b8490, [
+      { name: "Agente", value: String(sanction.target_name || sanction.discord_username || targetId) },
+      { name: "Discord ID", value: targetId },
+      { name: "Medida eliminada", value: (sanction.action_type === "warning" ? "Warn " : "Strike ") + String(sanction.level) },
+      { name: "Eliminó", value: issuerName },
+      { name: "Motivo original", value: String(sanction.reason || "Sin motivo") },
+    ]);
+    return json({ ok: true, message: "Sanción eliminada y roles sincronizados." });
+  } catch (error) {
+    console.error("Sanction deletion failed:", String(error));
+    return json({ error: "No se pudo eliminar la sanción o sincronizar los roles de Discord." }, 502);
   }
 }

@@ -26,6 +26,7 @@
 .sidebar-bottom .logout-button{display:flex;align-items:center;gap:8px;justify-content:flex-start;border-color:#39463c;color:#d8e1d9;padding:9px 10px}
 .sidebar-bottom .logout-button span{font-size:17px;line-height:1;color:var(--muted)}
 @media(max-width:820px){.sidebar-bottom{display:grid;grid-template-columns:1fr auto;align-items:center}.sidebar-bottom .connection{grid-column:1/-1}.sidebar-credit{grid-column:1/-1;text-align:left;padding-left:0}.sidebar-account{grid-column:1;grid-row:3}.sidebar-bottom .logout-button{grid-column:2;grid-row:3;width:auto}}
+.sanction-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:20px 0 12px}.sanction-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.sanction-tools .search{max-width:320px}.sanction-table{min-width:1020px}.sanction-table td{vertical-align:middle}.sanction-reason{max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.sanction-person strong,.sanction-person small{display:block}.sanction-person small{margin-top:2px;color:var(--muted);font-size:10px}.sanction-type{display:inline-flex;padding:4px 8px;border-radius:999px;font-size:10px;font-weight:800}.sanction-type.strike{color:#ffadad;background:#351e23;border:1px solid #63313b}.sanction-type.warning{color:#ffd28a;background:#362b1a;border:1px solid #685128}.sanction-state{font-weight:750}.sanction-state.active{color:#85dfb7}.sanction-state.failed{color:#ff9da4}.sanction-state.pending{color:#f1c978}.evidence-link{color:#a9c8ff;text-decoration:none}.evidence-link:hover{text-decoration:underline}.sanction-actions{display:flex;gap:6px;align-items:center}.sanction-actions .btn{padding:6px 9px;font-size:11px}
 </style>
 </head>
 <body>
@@ -120,17 +121,22 @@
       <div class="toolbar"><h2>Historial de rangos</h2><button id="refreshRankHistory" class="btn" type="button">Actualizar historial</button></div><div class="table-wrap"><table><thead><tr><th>Oficial</th><th>Movimiento</th><th>Cambio</th><th>Motivo</th><th>Autorizó</th><th>Fecha</th></tr></thead><tbody id="rankHistoryRows"><tr><td colspan="6" class="muted">Cargando historial…</td></tr></tbody></table></div>
     </section>
     <section id="sanctionsView" class="hidden">
-      <div class="panel"><h2>Registrar sanción disciplinaria</h2><p>La persona debe pertenecer a Policía. Los roles y el aviso se aplican automáticamente.</p>
+      <div class="stats">
+        <div class="stat"><span>Sanciones registradas</span><strong id="sanctionTotalCount">0</strong></div>
+        <div class="stat"><span>Activas</span><strong id="activeSanctionCount">0</strong></div>
+        <div class="stat"><span>Warns · Strikes</span><strong id="sanctionTypeCounts">0 · 0</strong></div>
+      </div>
+      <div class="panel"><div class="eyebrow">UCOP · ASUNTOS INTERNOS</div><h2>Aplicar sanción</h2><p>Selecciona a un agente de la base UCOP. Los roles se sincronizan con Discord y la acción queda registrada.</p>
         <form id="sanctionForm">
-          <div class="field"><label for="sanctionDiscordId">Agente UCOP</label><select id="sanctionDiscordId" class="search" required><option value="">Selecciona un agente registrado</option></select></div>
-          <div class="details"><div class="field"><label for="sanctionTargetName">Nombre IC (opcional)</label><input id="sanctionTargetName" placeholder="Nombre del oficial"></div><div class="field"><label for="sanctionPlate">Placa (opcional)</label><input id="sanctionPlate" placeholder="Número de placa"></div></div>
-          <div class="field"><label for="sanctionType">Tipo de acción</label><select id="sanctionType" class="search"><option value="warning">Amonestación (Warn)</option><option value="strike">Strike</option></select></div>
-          <div class="field"><label for="sanctionReason">Motivo</label><textarea id="sanctionReason" class="search" rows="4" maxlength="1000" required placeholder="Describe el motivo de la medida disciplinaria"></textarea></div>
-          <button id="sanctionButton" class="btn primary" type="submit">Registrar sanción</button>
+          <div class="details"><div class="field"><label for="sanctionDiscordId">Oficial · Placa</label><select id="sanctionDiscordId" class="search" required><option value="">Selecciona un agente registrado</option></select></div><div class="field"><label for="sanctionType">Tipo de medida</label><select id="sanctionType" class="search"><option value="warning">Amonestación · Warn</option><option value="strike">Strike</option></select></div></div>
+          <div class="details"><div class="field"><label for="sanctionTargetName">Nombre del oficial</label><input id="sanctionTargetName" readonly placeholder="Se completa al elegir agente"></div><div class="field"><label for="sanctionPlate">Placa</label><input id="sanctionPlate" readonly placeholder="Se completa al elegir agente"></div></div>
+          <div class="field"><label for="sanctionReason">Motivo de la sanción <span aria-hidden="true">*</span></label><textarea id="sanctionReason" class="search" rows="3" maxlength="1000" required placeholder="Describe los hechos y el fundamento de la medida…"></textarea></div>
+          <div class="field"><label for="sanctionEvidence">Evidencia · enlace opcional</label><input id="sanctionEvidence" type="url" maxlength="500" placeholder="https://…"><small class="muted">Enlace a una captura, clip o prueba del incidente.</small></div>
+          <button id="sanctionButton" class="btn reject" type="submit">Aplicar sanción</button>
         </form>
       </div>
-      <div class="toolbar"><h2>Historial disciplinario</h2><button id="refreshSanctions" class="btn" type="button">Actualizar historial</button></div>
-      <div id="sanctionList" class="candidate-list"><div class="empty">Carga el historial para comenzar.</div></div>
+      <div class="sanction-toolbar"><div><div class="eyebrow">REGISTRO DISCIPLINARIO</div><h2>Historial de sanciones <span id="sanctionTableCount" class="muted"></span></h2></div><div class="sanction-tools"><input id="sanctionSearch" class="search" type="search" placeholder="Buscar placa, agente o motivo…"><select id="sanctionStatusFilter" class="search" aria-label="Filtrar estado"><option value="all">Todos los estados</option><option value="active">Activas</option><option value="failed">Fallidas</option><option value="pending">Pendientes</option></select><button id="refreshSanctions" class="btn" type="button">Actualizar</button></div></div>
+      <div class="table-wrap"><table class="sanction-table"><thead><tr><th>Placa</th><th>Oficial</th><th>Tipo</th><th>Motivo</th><th>Fecha</th><th>Aplicó</th><th>Evidencia</th><th>Estado</th><th>Acciones</th></tr></thead><tbody id="sanctionRows"><tr><td colspan="9" class="muted">Carga el historial para comenzar.</td></tr></tbody></table></div>
     </section>
     <div id="appNotice" class="notice hidden"></div>
     <div id="candidateList" class="candidate-list"><div class="empty">Cargando candidaturas…</div></div>
@@ -166,6 +172,7 @@ let activeRankRequestStatus = "pending";
 let token = sessionStorage.getItem(TOKEN_KEY) || "";
 let applications = [];
 let rankRequests = [];
+let sanctions = [];
 let personnel = [];
 let rankRoles = [];
 let availableRoles = [];
@@ -418,22 +425,35 @@ async function decide(app, action, button) {
   }
 }
 async function loadSanctions() {
-  const list = $("sanctionList");
-  list.replaceChildren();
+  const rows = $("sanctionRows");
+  rows.replaceChildren();
   try {
     const result = await request("sanctions");
-    const rows = result.sanctions || [];
-    if (!rows.length) { const empty=document.createElement("div"); empty.className="empty"; empty.textContent="Todavía no hay sanciones registradas."; list.append(empty); return; }
-    rows.forEach(item => {
-      const card=document.createElement("article"); card.className="candidate";
-      const head=document.createElement("div"); head.className="candidate-head";
-      const title=document.createElement("h3"); title.textContent=(item.action_type === "warning" ? "Amonestación · Warn " : "Strike ")+item.level+" · "+(item.target_name||item.discord_username||item.discord_user_id);
-      const badge=document.createElement("span"); badge.className="badge "+(item.status === "active" ? "accepted" : item.status === "failed" ? "rejected" : "pending"); badge.textContent=item.status === "active" ? "Activa" : item.status === "failed" ? "Fallida" : "Pendiente";
-      head.append(title,badge); const grid=document.createElement("div"); grid.className="details";
-      grid.append(detail("Discord",item.discord_user_id),detail("Motivo",item.reason),detail("Registrado por",item.issuer_name),detail("Fecha",niceDate(item.created_at)),detail("Placa",item.plate)); card.append(head,grid); list.append(card);
-    });
-  } catch(error) { const empty=document.createElement("div"); empty.className="empty"; empty.textContent=error.message; list.append(empty); }
+    sanctions = result.sanctions || [];
+    renderSanctions();
+  } catch(error) { const row=document.createElement("tr"),cell=document.createElement("td");cell.colSpan=9;cell.className="muted";cell.textContent=error.message;row.append(cell);rows.append(row); }
 }
+function renderSanctions(){
+  const rows=$("sanctionRows"),query=$("sanctionSearch").value.trim().toLocaleLowerCase("es"),filter=$("sanctionStatusFilter").value;
+  const active=sanctions.filter(x=>x.status==="active"&&x.active).length,warns=sanctions.filter(x=>x.action_type==="warning"&&x.status==="active").length,strikes=sanctions.filter(x=>x.action_type==="strike"&&x.status==="active").length;
+  $("sanctionTotalCount").textContent=String(sanctions.length);$("activeSanctionCount").textContent=String(active);$("sanctionTypeCounts").textContent=warns+" · "+strikes;
+  const visible=sanctions.filter(item=>(filter==="all"||item.status===filter)&&[item.plate,item.target_name,item.discord_username,item.discord_user_id,item.reason,item.issuer_name,item.action_type].join(" ").toLocaleLowerCase("es").includes(query));
+  $("sanctionTableCount").textContent="· "+visible.length+(visible.length===sanctions.length?"":" de "+sanctions.length);
+  rows.replaceChildren();
+  if(!visible.length){const row=document.createElement("tr"),cell=document.createElement("td");cell.colSpan=9;cell.className="muted";cell.textContent=sanctions.length?"No hay sanciones que coincidan con el filtro.":"Todavía no hay sanciones registradas.";rows.append(row);row.append(cell);return;}
+  visible.forEach(item=>{
+    const row=document.createElement("tr"),plate=document.createElement("td"),name=document.createElement("td"),type=document.createElement("td"),reason=document.createElement("td"),date=document.createElement("td"),issuer=document.createElement("td"),evidence=document.createElement("td"),state=document.createElement("td"),actions=document.createElement("td");
+    plate.textContent=item.plate?"#"+item.plate:"—";
+    const personName=document.createElement("strong"),personId=document.createElement("small");personName.textContent=item.target_name||item.discord_username||"Agente";personId.textContent="ID "+(item.discord_user_id||"—");name.className="sanction-person";name.append(personName,personId);
+    const typeBadge=document.createElement("span");typeBadge.className="sanction-type "+(item.action_type==="warning"?"warning":"strike");typeBadge.textContent=(item.action_type==="warning"?"Warn ":"Strike ")+(item.level||"");type.append(typeBadge);
+    reason.className="sanction-reason";reason.title=item.reason||"";reason.textContent=item.reason||"—";date.textContent=niceDate(item.created_at);issuer.textContent=(item.issuer_name||"—").replace(/^<@!?([0-9]+)>$/,"$1");
+    if(item.evidence_url){const link=document.createElement("a");link.className="evidence-link";link.href=item.evidence_url;link.target="_blank";link.rel="noopener noreferrer";link.textContent="Ver prueba ↗";evidence.append(link);}else evidence.textContent="Sin evidencia";
+    state.className="sanction-state "+(item.status||"pending");state.textContent=item.status==="active"?"Activa":item.status==="failed"?"Fallida":"Pendiente";
+    const remove=document.createElement("button");remove.type="button";remove.className="btn reject";remove.textContent="Eliminar";remove.addEventListener("click",()=>deleteSanctionRecord(item,remove));actions.className="sanction-actions";actions.append(remove);
+    [plate,name,type,reason,date,issuer,evidence,state,actions].forEach(cell=>row.append(cell));rows.append(row);
+  });
+}
+async function deleteSanctionRecord(item,button){const label=(item.action_type==="warning"?"Warn ":"Strike ")+(item.level||"");if(!confirm("¿Eliminar definitivamente "+label+" de "+(item.target_name||item.discord_username||item.discord_user_id)+"?\n\nSe actualizarán los roles Warn/Strike en Discord. Si es un Strike 3, también se retirará Expulsado y se restaurará Policía."))return;button.disabled=true;button.textContent="Eliminando…";try{const result=await request("sanction-delete",{method:"POST",body:{id:item.id}});showToast(result.message||"Sanción eliminada.");await loadSanctions();}catch(error){showToast(error.message);button.disabled=false;button.textContent="Eliminar";}}
 function renderPersonnel(){
   const rows=$("personnelRows"),query=$("personnelSearch").value.trim().toLocaleLowerCase("es");rows.replaceChildren();
   const visible=personnel.filter(p=>[p.plate,p.full_name,p.name_ooc,p.discord_username,p.discord_user_id,p.rank_name].join(" ").toLocaleLowerCase("es").includes(query));
@@ -462,16 +482,17 @@ $("sanctionForm").addEventListener("submit", async event => {
   const discordId=$("sanctionDiscordId").value.trim();
   const type=$("sanctionType").value;
   const confirmText=type === "strike" ? "Registrar un strike" : "Registrar una amonestación";
-  if (!confirm(confirmText+" para Discord ID "+discordId+"? Se cambiarán sus roles y se publicará el aviso en el canal de sanciones.")) return;
+  if (!confirm(confirmText+" para "+($("sanctionTargetName").value||discordId)+"? Se actualizarán sus roles y se publicará el aviso en el canal de sanciones.")) return;
   const button=$("sanctionButton"); button.disabled=true; button.textContent="Aplicando…";
   try {
-    const result=await request("sanction",{method:"POST",body:{discord_user_id:discordId,action_type:type,target_name:$("sanctionTargetName").value.trim(),plate:$("sanctionPlate").value.trim(),reason:$("sanctionReason").value.trim()}});
+    const result=await request("sanction",{method:"POST",body:{discord_user_id:discordId,action_type:type,target_name:$("sanctionTargetName").value.trim(),plate:$("sanctionPlate").value.trim(),reason:$("sanctionReason").value.trim(),evidence_url:$("sanctionEvidence").value.trim()}});
     showToast(result.warning || (result.expelled ? "Tercer strike: rol expulsado asignado y rol Policía retirado." : "Sanción aplicada y registrada."));
     $("sanctionForm").reset(); await loadSanctions();
   } catch(error) { showToast(error.message); }
   finally { button.disabled=false; button.textContent="Registrar sanción"; }
 });
 $("refreshSanctions").addEventListener("click",loadSanctions);
+$("sanctionSearch").addEventListener("input",renderSanctions);$("sanctionStatusFilter").addEventListener("change",renderSanctions);
 $("sanctionDiscordId").addEventListener("change",()=>{const agent=personnel.find(p=>p.discord_user_id===$("sanctionDiscordId").value);$("sanctionTargetName").value=agent?.full_name||"";$("sanctionPlate").value=agent?.plate||"";});
 document.querySelectorAll("#rankRequestStatusTabs .tab").forEach(button=>button.addEventListener("click",()=>{activeRankRequestStatus=button.dataset.rankStatus;renderRankRequests();}));
 document.querySelectorAll("#applicationStatusTabs .tab").forEach(button=>button.addEventListener("click",()=>{activeStatus=button.dataset.status;renderApplications();}));
