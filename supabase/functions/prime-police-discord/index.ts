@@ -7,6 +7,7 @@ const EXPELLED_ROLE_ID = "1539970134482092034";
 const APPLICATION_CHANNEL_ID = "1539970136683847857";
 const APPLICATION_ANNOUNCEMENTS_CHANNEL_ID = "1539970135375478860";
 const RANK_REQUEST_CHANNEL_ID = "1539970135375478859";
+const POLICE_ONLY_RANK_LABEL = "Solo rol de Policía (sin rango configurado)";
 const APPLICATION_ID = "1540484542354428025";
 const MANAGER_ROLE_IDS = new Set(["1539970134565982313", "1539970134544748562", "1539970134544748556", "1539970134544748557", "1539970134519578773", "1539970134519578774"]);
 const canManage = (i:any) => (i.member?.roles || []).some((role:string) => MANAGER_ROLE_IDS.has(role));
@@ -53,30 +54,34 @@ async function processRankRequest(i:any,userId:string,username:string,a:any){
  const plate=String(a.plate||"").trim().slice(0,30);
  const requestedRank=String(a.requested_rank||"").trim().slice(0,100);
  const approvedBy=String(a.approved_by||"").replace(/@/g,"").trim().slice(0,100);
- if(!characterName||!plate||!requestedRank||!approvedBy){await editInteractionReply(i,"Completa nombre IC, placa, rango y nombre de quien aprobó la entrevista.");return;}
+ if(!characterName||!plate||!approvedBy){await editInteractionReply(i,"Completa nombre IC, placa y nombre de quien aprobó la entrevista.");return;}
  const member=await discord("/guilds/"+GUILD_ID+"/members/"+encodeURIComponent(userId)) as any;
  const roles:string[]=member?.roles||[];
  if(!roles.includes(PRESELECTION_ROLE_ID)||roles.includes(CIC_ROLE_ID)||roles.includes(EXPELLED_ROLE_ID)){await editInteractionReply(i,"Solo las personas aceptadas con el rol de Preselección pueden enviar una solicitud de rango tras su entrevista IC.");return;}
  const configured=await db("police_rank_roles?select=role_name");
- const rank=(configured||[]).find((row:any)=>String(row.role_name||"").trim().toLocaleLowerCase("es")===requestedRank.toLocaleLowerCase("es"));
- if(!rank){const names=(configured||[]).map((row:any)=>String(row.role_name||"")).filter(Boolean);await editInteractionReply(i,names.length?"Ese rango no está configurado. Rangos disponibles: "+names.join(", "):"UCOP todavía no ha configurado rangos en la web.");return;}
+ const ranks=configured||[];
+ let rank:any=null;
+ let rankName="";
+ if(!requestedRank&&!ranks.length)rankName=POLICE_ONLY_RANK_LABEL;
+ else if(!requestedRank){await editInteractionReply(i,"UCOP ya configuró rangos. Indica el rango solicitado en el formulario.");return;}
+ else{rank=ranks.find((row:any)=>String(row.role_name||"").trim().toLocaleLowerCase("es")===requestedRank.toLocaleLowerCase("es"));if(!rank){const names=ranks.map((row:any)=>String(row.role_name||"")).filter(Boolean);await editInteractionReply(i,names.length?"Ese rango no está configurado. Rangos disponibles: "+names.join(", "):"UCOP todavía no ha configurado rangos en la web.");return;}rankName=String(rank.role_name);}
  const pending=await db("police_rank_requests?select=id&discord_user_id=eq."+encodeURIComponent(userId)+"&status=eq.pending&limit=1");
  if(pending?.length){await editInteractionReply(i,"Ya tienes una solicitud de rango pendiente de revisión por UCOP.");return;}
- const rows=await db("police_rank_requests",{method:"POST",body:JSON.stringify({discord_user_id:userId,discord_username:username,character_name:characterName,plate,requested_rank_name:String(rank.role_name),approved_by_name:approvedBy})});
+ const rows=await db("police_rank_requests",{method:"POST",body:JSON.stringify({discord_user_id:userId,discord_username:username,character_name:characterName,plate,requested_rank_name:rankName,approved_by_name:approvedBy})});
  const request=rows?.[0];
  if(!request?.id)throw Error("Rank request was not stored");
  try{
-  const posted=await discord("/channels/"+RANK_REQUEST_CHANNEL_ID+"/messages",{method:"POST",body:JSON.stringify({embeds:[{title:"📋 Solicitud de rango · UCOP",description:"Nueva solicitud para revisión de UCOP.",fields:[{name:"Nombre del personaje",value:characterName},{name:"Número de placa",value:plate},{name:"Rango solicitado",value:String(rank.role_name)},{name:"Aprobado por",value:approvedBy},{name:"Solicitado por",value:"<@"+userId+">"}],color:14264415,footer:{text:"Solicitud "+String(request.id)+" · Revisión pendiente en la web UCOP"}}],allowed_mentions:{parse:[],users:[]}})}) as any;
+  const posted=await discord("/channels/"+RANK_REQUEST_CHANNEL_ID+"/messages",{method:"POST",body:JSON.stringify({embeds:[{title:"📋 Solicitud de rango · UCOP",description:"Nueva solicitud para revisión de UCOP.",fields:[{name:"Nombre del personaje",value:characterName},{name:"Número de placa",value:plate},{name:"Rango solicitado",value:rankName},{name:"Aprobado por",value:approvedBy},{name:"Solicitado por",value:"<@"+userId+">"}],color:14264415,footer:{text:"Solicitud "+String(request.id)+" · Revisión pendiente en la web UCOP"}}],allowed_mentions:{parse:[],users:[]}})}) as any;
   if(posted?.id)await db("police_rank_requests?id=eq."+encodeURIComponent(String(request.id)),{method:"PATCH",body:JSON.stringify({discord_message_id:String(posted.id)})});
  }catch(error){console.error("Could not post rank request to Discord channel:",String(error));await editInteractionReply(i,"La solicitud quedó guardada en la web UCOP, pero no se pudo publicar en el canal de solicitudes. Contacta con UCOP.");return;}
  await editInteractionReply(i,"Solicitud de rango enviada a UCOP para revisión. El equipo comprobará la aprobación de tu entrevista IC.");
 }
-const modalInput=(id:string,placeholder:string,required=true,style=2,maxLength=style===1?100:1000)=>({type:4,custom_id:id,style,...(placeholder?{placeholder}:{}),min_length:1,max_length:maxLength,required});
+const modalInput=(id:string,placeholder:string,required=true,style=2,maxLength=style===1?100:1000)=>({type:4,custom_id:id,style,...(placeholder?{placeholder}:{}),...(required?{min_length:1}:{}),max_length:maxLength,required});
 function rankRequestModal(){return response(9,{custom_id:"prime_rank_request_submit",title:"Solicitar rango · UCOP",components:[
  {type:10,content:"⚠️ Este formulario se enviará a UCOP. No compartas contraseñas ni información confidencial. Tu usuario e ID de Discord se registran automáticamente."},
  {type:18,label:"Nombre IC",component:modalInput("character_name","Nombre de tu personaje.",true,1)},
  {type:18,label:"Número de placa",component:modalInput("plate","Número de placa policial.",true,1,30)},
- {type:18,label:"Rango solicitado",description:"Debe coincidir con un rango configurado en la web UCOP.",component:modalInput("requested_rank","Escribe el rango que solicitas.",true,1)},
+ {type:18,label:"Rango solicitado (opcional por ahora)",description:"Déjalo vacío para solicitar solo el rol de Policía mientras UCOP configura rangos.",component:modalInput("requested_rank","Opcional hasta que UCOP configure rangos.",false,1)},
  {type:18,label:"Aprobado por (sin @)",description:"Indica el nombre de quien aprobó tu entrevista IC.",component:modalInput("approved_by","Escribe el nombre, sin mencionar a nadie.",true,1)}
 ]})}
 function applicationQuestions(){return [

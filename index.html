@@ -85,7 +85,7 @@
     <nav id="applicationStatusTabs" class="tabs" style="display:flex;gap:8px;flex-wrap:wrap;margin:14px 0"><button class="btn tab primary" data-status="pending">Pendientes</button><button class="btn tab" data-status="accepted">Aceptadas</button><button class="btn tab" data-status="rejected">Rechazadas</button></nav>
 
     <section id="rankRequestsView" class="hidden">
-      <section class="intro"><h2>Solicitudes de rango</h2><p>UCOP comprueba la entrevista y la autorización indicada. Al aprobar, asigna el rol de Policía y el rango solicitado y actualiza la ficha de personal.</p></section>
+      <section class="intro"><h2>Solicitudes de rango</h2><p>UCOP comprueba la entrevista y la autorización indicada. Si aún no hay rangos configurados, puede aprobar solo el rol de Policía; después podrá asignar el rango desde el panel.</p></section>
       <section class="stats">
         <div class="stat"><span>Pendientes</span><strong id="rankRequestPendingCount">0</strong></div>
         <div class="stat"><span>Aprobadas</span><strong id="rankRequestAcceptedCount">0</strong></div>
@@ -366,7 +366,7 @@ function renderRankRequests() {
     title.textContent=(item.character_name||"Agente")+" · "+(item.requested_rank_name||"Rango sin indicar");
     sub.className="muted";sub.textContent=(item.discord_username||"Usuario de Discord")+" · Placa "+(item.plate||"—")+" · ID "+(item.discord_user_id||"—");
     identity.append(title,sub);
-    const badge=document.createElement("span");badge.className="badge "+(item.status==="pending"?"pending":item.status==="accepted"?"accepted":"rejected");badge.textContent=item.status==="pending"?"Pendiente":item.status==="accepted"?"Aprobada · Policía y rango":"Rechazada";
+    const policeOnly=item.requested_rank_name==="Solo rol de Policía (sin rango configurado)";const badge=document.createElement("span");badge.className="badge "+(item.status==="pending"?"pending":item.status==="accepted"?"accepted":"rejected");badge.textContent=item.status==="pending"?"Pendiente":item.status==="accepted"?(policeOnly?"Aprobada · Rol Policía":"Aprobada · Policía y rango"):"Rechazada";
     head.append(identity,badge);
     const grid=document.createElement("div");grid.className="details";
     grid.append(detail("Aprobado por",item.approved_by_name),detail("Fecha de solicitud",niceDate(item.created_at)));
@@ -374,10 +374,10 @@ function renderRankRequests() {
     if(item.review_reason)grid.append(detail("Observación",item.review_reason));
     const actions=document.createElement("div");actions.className="candidate-actions";
     if(item.status==="pending"){
-      const accept=document.createElement("button");accept.type="button";accept.className="btn accept";accept.textContent="Aprobar y asignar Policía + rango";accept.addEventListener("click",()=>reviewRankRequest(item,"accept",accept));
+      const accept=document.createElement("button");accept.type="button";accept.className="btn accept";accept.textContent=policeOnly?"Aprobar y asignar Policía":"Aprobar Policía + rango";accept.addEventListener("click",()=>reviewRankRequest(item,"accept",accept));
       const reject=document.createElement("button");reject.type="button";reject.className="btn reject";reject.textContent="Rechazar";reject.addEventListener("click",()=>reviewRankRequest(item,"reject",reject));actions.append(accept,reject);
     }else{
-      const result=document.createElement("span");result.className="muted";result.textContent=item.status==="accepted"?"El rango solicitado fue aplicado en Discord y en la ficha UCOP.":"Solicitud revisada por UCOP.";actions.append(result);
+      const result=document.createElement("span");result.className="muted";result.textContent=item.status==="accepted"?(policeOnly?"Rol Policía aplicado; rango pendiente de configuración.":"El rango solicitado fue aplicado en Discord y en la ficha UCOP."):"Solicitud revisada por UCOP.";actions.append(result);
     }
     card.append(head,grid,actions);list.append(card);
   });
@@ -388,12 +388,12 @@ async function loadRankRequests() {
   catch(error){list.replaceChildren();const empty=document.createElement("div");empty.className="empty";empty.textContent=error.message;list.append(empty);}
 }
 async function reviewRankRequest(item,decision,button) {
-  const verb=decision==="accept"?"aprobar y asignar el rol de Policía y el rango":"rechazar";
-  if(!confirm("¿Confirmas "+verb+" a "+item.character_name+" ("+item.plate+") con el rango "+item.requested_rank_name+"? UCOP debe comprobar la entrevista IC y el nombre indicado en «Aprobado por»."))return;
+  const policeOnly=item.requested_rank_name==="Solo rol de Policía (sin rango configurado)";const verb=decision==="accept"?(policeOnly?"aprobar y asignar solo el rol de Policía":"aprobar y asignar el rol de Policía y el rango"):"rechazar";
+  if(!confirm("¿Confirmas "+verb+" a "+item.character_name+" ("+item.plate+")"+(policeOnly?" sin rango por ahora":" con el rango "+item.requested_rank_name)+"? UCOP debe comprobar la entrevista IC y el nombre indicado en «Aprobado por»."))return;
   const reason=decision==="reject"?(prompt("Observación del rechazo (opcional):","")||""):"";
   button.disabled=true;button.textContent="Procesando…";
   try{const result=await request("rank-request-review",{method:"POST",body:{id:item.id,decision,reason}});showToast(result.message||"Solicitud revisada.");await Promise.all([loadRankRequests(),loadPersonnel()]);}
-  catch(error){showToast(error.message);button.disabled=false;button.textContent=decision==="accept"?"Aprobar y asignar Policía + rango":"Rechazar";}
+  catch(error){showToast(error.message);button.disabled=false;button.textContent=decision==="accept"?(policeOnly?"Aprobar y asignar Policía":"Aprobar Policía + rango"):"Rechazar";}
 }
 async function decide(app, action, button) {
   if (action === "accept" && !confirm("¿Aceptar a " + app.full_name + " y asignarle el rol Preselección en Discord? El rol de Policía se asignará después de la entrevista, al aprobar su solicitud de rango.")) return;
