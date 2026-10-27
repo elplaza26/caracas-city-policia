@@ -539,7 +539,7 @@ Deno.serve(async (req: Request) => {
       commands_registered: commandsRegistered,
       configured: { discord: Boolean(BOT_TOKEN), database: Boolean(SUPABASE_URL && SERVICE_KEY), discord_oauth: Boolean(DISCORD_OAUTH_CLIENT_SECRET) },
       warning: commandsRegistered ? undefined : "La API está activa, pero no se pudieron actualizar los comandos de Discord.",
-      version: "discord-oauth-2026-10-27",
+      version: "rank-only-review-2026-10-27b",
     });
   }
   return json({ error: "Método no permitido." }, 405);

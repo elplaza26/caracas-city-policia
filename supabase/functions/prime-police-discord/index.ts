@@ -63,7 +63,7 @@ async function processRankRequest(i:any,userId:string,username:string,a:any){
  const ranks=configured||[];
  let rank:any=null;
  let rankName="";
- if(!requestedRank&&!ranks.length)rankName=POLICE_ONLY_RANK_LABEL;
+ if(!ranks.length)rankName=POLICE_ONLY_RANK_LABEL;
  else if(!requestedRank){await editInteractionReply(i,"UCOP ya configuró rangos. Indica el rango solicitado en el formulario.");return;}
  else{rank=ranks.find((row:any)=>String(row.role_name||"").trim().toLocaleLowerCase("es")===requestedRank.toLocaleLowerCase("es"));if(!rank){const names=ranks.map((row:any)=>String(row.role_name||"")).filter(Boolean);await editInteractionReply(i,names.length?"Ese rango no está configurado. Rangos disponibles: "+names.join(", "):"UCOP todavía no ha configurado rangos en la web.");return;}rankName=String(rank.role_name);}
  const pending=await db("police_rank_requests?select=id&discord_user_id=eq."+encodeURIComponent(userId)+"&status=eq.pending&limit=1");
@@ -82,7 +82,7 @@ function rankRequestModal(){return response(9,{custom_id:"prime_rank_request_sub
  {type:10,content:"⚠️ Este formulario se enviará a UCOP. No compartas contraseñas ni información confidencial. Tu usuario e ID de Discord se registran automáticamente."},
  {type:18,label:"Nombre IC",component:modalInput("character_name","Nombre de tu personaje.",true,1)},
  {type:18,label:"Número de placa",component:modalInput("plate","Número de placa policial.",true,1,30)},
- {type:18,label:"Rango solicitado (opcional por ahora)",description:"Déjalo vacío para solicitar solo el rol de Policía mientras UCOP configura rangos.",component:modalInput("requested_rank","Opcional hasta que UCOP configure rangos.",false,1)},
+ {type:18,label:"Rango solicitado (opcional por ahora)",description:"Si aún no hay rangos configurados, se solicitará solo el rol Policía.",component:modalInput("requested_rank","Se ignorará mientras no haya rangos configurados.",false,1)},
  {type:18,label:"Aprobado por (sin @)",description:"Indica el nombre de quien aprobó tu entrevista IC.",component:modalInput("approved_by","Escribe el nombre, sin mencionar a nadie.",true,1)}
 ]})}
 function applicationQuestions(){return [
@@ -150,7 +150,7 @@ async function handle(i:any){
 }
 Deno.serve(async(req:Request)=>{
  if(req.method==="OPTIONS")return new Response(null,{status:204,headers:CORS});
- if(req.method==="GET")return json({ok:true,service:"PRIME POLICE Discord applications",release:"modal-fix-2026-10-27a",configured:{discord:Boolean(BOT_TOKEN),database:Boolean(SUPABASE_URL&&SERVICE_KEY),public_key:Boolean(DISCORD_PUBLIC_KEY)},application_id:APPLICATION_ID,guild_id:GUILD_ID,commands:["publicar_postulaciones","postulacion"],message:DISCORD_PUBLIC_KEY?"Endpoint disponible.":"Falta configurar DISCORD_PUBLIC_KEY en los secretos de Supabase."});
+ if(req.method==="GET")return json({ok:true,service:"PRIME POLICE Discord applications",release:"rank-only-submit-2026-10-27b",configured:{discord:Boolean(BOT_TOKEN),database:Boolean(SUPABASE_URL&&SERVICE_KEY),public_key:Boolean(DISCORD_PUBLIC_KEY)},application_id:APPLICATION_ID,guild_id:GUILD_ID,commands:["publicar_postulaciones","postulacion"],message:DISCORD_PUBLIC_KEY?"Endpoint disponible.":"Falta configurar DISCORD_PUBLIC_KEY en los secretos de Supabase."});
  if(req.method!=="POST")return json({error:"Method not allowed"},405);
  const body=await req.text();if(!await validSignature(req,body))return json({error:"Invalid Discord signature or DISCORD_PUBLIC_KEY not configured"},401);
  let i:any;try{i=JSON.parse(body)}catch{return json({error:"Invalid JSON"},400)}
