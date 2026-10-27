@@ -117,13 +117,7 @@ async function handle(i:any){
    return response(5,{data:{flags:64}});
   }
   if(name==="postulacion")return ephemeral("Para postularte a PRIME POLICE, busca el mensaje de reclutamiento y pulsa **Presentar postulación**. Si no aparece, avisa a un administrador.");
-  if(name==="panel_codigo"){
-   if(!canManage(i))return ephemeral("No tienes permiso para acceder al panel administrativo.");
-   const alphabet="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";let code="";const random=new Uint8Array(10);crypto.getRandomValues(random);for(const n of random)code+=alphabet[n%alphabet.length];
-   const digest=new Uint8Array(await crypto.subtle.digest("SHA-256",encoder.encode(code)));const hash=Array.from(digest,b=>b.toString(16).padStart(2,"0")).join("");
-   await db("police_panel_login_codes",{method:"POST",body:JSON.stringify({code_hash:hash,discord_user_id:userId,expires_at:new Date(Date.now()+5*60*1000).toISOString()})});
-   return ephemeral("Código temporal del panel (caduca en 5 minutos y solo sirve una vez):\n\n**"+code+"**\n\nNo lo compartas.");
-  }
+  if(name==="panel_codigo")return ephemeral("El acceso por código se ha sustituido. Entra desde la web con tu cuenta de Discord y un rol autorizado.");
   return ephemeral("Comando no reconocido.");
  }
  if(i.type===3){
@@ -150,7 +144,7 @@ async function handle(i:any){
 }
 Deno.serve(async(req:Request)=>{
  if(req.method==="OPTIONS")return new Response(null,{status:204,headers:CORS});
- if(req.method==="GET")return json({ok:true,service:"PRIME POLICE Discord applications",release:"modal-fix-2026-10-27a",configured:{discord:Boolean(BOT_TOKEN),database:Boolean(SUPABASE_URL&&SERVICE_KEY),public_key:Boolean(DISCORD_PUBLIC_KEY)},application_id:APPLICATION_ID,guild_id:GUILD_ID,commands:["publicar_postulaciones","postulacion","panel_codigo"],message:DISCORD_PUBLIC_KEY?"Endpoint disponible.":"Falta configurar DISCORD_PUBLIC_KEY en los secretos de Supabase."});
+ if(req.method==="GET")return json({ok:true,service:"PRIME POLICE Discord applications",release:"modal-fix-2026-10-27a",configured:{discord:Boolean(BOT_TOKEN),database:Boolean(SUPABASE_URL&&SERVICE_KEY),public_key:Boolean(DISCORD_PUBLIC_KEY)},application_id:APPLICATION_ID,guild_id:GUILD_ID,commands:["publicar_postulaciones","postulacion"],message:DISCORD_PUBLIC_KEY?"Endpoint disponible.":"Falta configurar DISCORD_PUBLIC_KEY en los secretos de Supabase."});
  if(req.method!=="POST")return json({error:"Method not allowed"},405);
  const body=await req.text();if(!await validSignature(req,body))return json({error:"Invalid Discord signature or DISCORD_PUBLIC_KEY not configured"},401);
  let i:any;try{i=JSON.parse(body)}catch{return json({error:"Invalid JSON"},400)}

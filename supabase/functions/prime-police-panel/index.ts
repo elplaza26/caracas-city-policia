@@ -8,8 +8,12 @@ const POLICE_ROLE_ID = "1539970134482092038";
 const PRESELECTION_ROLE_ID = "1564685481457877012";
 const APPLICATION_ID = "1540484542354428025";
 const BOT_TOKEN = Deno.env.get("DISCORD_BOT_TOKEN") ?? "";
+const DISCORD_OAUTH_CLIENT_SECRET = Deno.env.get("DISCORD_OAUTH_CLIENT_SECRET") ?? "";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const DISCORD_OAUTH_CALLBACK = SUPABASE_URL.replace(/\/$/, "") + "/functions/v1/prime-police-panel?panel=oauth-callback";
+const PANEL_SITE_URL = "https://primepolicerp.github.io/PRIME-POLICE/";
+const PANEL_SESSION_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -61,9 +65,13 @@ async function ensureSlashCommands() {
   const desired = [
     { name: "postulacion", description: "Información sobre cómo postularte a PRIME POLICE" },
     { name: "publicar_postulaciones", description: "Actualizar paneles de postulación y rango UCOP" },
-    { name: "panel_codigo", description: "Generar un código temporal para entrar al panel policial" },
   ];
   const existing = await discord(path) as any[];
+  for (const command of existing ?? []) {
+    if (command.name === "panel_codigo") {
+      await discord(path + "/" + command.id, { method: "DELETE" });
+    }
+  }
   for (const command of desired) {
     const found = (existing ?? []).find((item: any) => item.name === command.name);
     if (found) {
@@ -156,6 +164,114 @@ async function login(req: Request) {
   } catch (e) {
     console.error("Panel login error:", String(e));
     return json({ error: "No se pudo iniciar sesión. Revisa la configuración del servidor." }, 500);
+  }
+}
+
+function siteRedirect(params: Record<string, string>, clearStateCookie = false) {
+  const destination = new URL(PANEL_SITE_URL);
+  for (const [key, value] of Object.entries(params)) destination.searchParams.set(key, value);
+  const headers = new Headers({ Location: destination.toString(), "Cache-Control": "no-store" });
+  if (clearStateCookie) headers.append("Set-Cookie", "prime_police_oauth_state=; Path=/functions/v1/prime-police-panel; Max-Age=0; HttpOnly; Secure; SameSite=Lax");
+  return new Response(null, { status: 302, headers });
+}
+
+function cookieValue(req: Request, name: string) {
+  const cookie = req.headers.get("cookie") ?? "";
+  const entry = cookie.split(";").map((part) => part.trim()).find((part) => part.startsWith(name + "="));
+  if (!entry) return "";
+  try { return decodeURIComponent(entry.slice(name.length + 1)); } catch { return ""; }
+}
+
+function randomState() {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return base64urlEncode(bytes);
+}
+
+function randomLoginCode() {
+  const bytes = new Uint8Array(10);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => PANEL_SESSION_CODE_ALPHABET[byte % PANEL_SESSION_CODE_ALPHABET.length]).join("");
+}
+
+function startDiscordOAuth() {
+  if (!DISCORD_OAUTH_CLIENT_SECRET || !BOT_TOKEN || !SUPABASE_URL || !SERVICE_KEY) {
+    return siteRedirect({ auth_error: "oauth_not_configured" });
+  }
+  const state = randomState();
+  const authorize = new URL("https://discord.com/oauth2/authorize");
+  authorize.searchParams.set("client_id", APPLICATION_ID);
+  authorize.searchParams.set("response_type", "code");
+  authorize.searchParams.set("scope", "identify");
+  authorize.searchParams.set("redirect_uri", DISCORD_OAUTH_CALLBACK);
+  authorize.searchParams.set("state", state);
+  return new Response(null, {
+    status: 302,
+    headers: {
+      Location: authorize.toString(),
+      "Cache-Control": "no-store",
+      "Set-Cookie": "prime_police_oauth_state=" + encodeURIComponent(state) + "; Path=/functions/v1/prime-police-panel; Max-Age=600; HttpOnly; Secure; SameSite=Lax",
+    },
+  });
+}
+
+async function finishDiscordOAuth(req: Request) {
+  const params = new URL(req.url).searchParams;
+  if (params.get("error")) return siteRedirect({ auth_error: "oauth_cancelled" }, true);
+  const issuer = params.get("iss");
+  if (issuer && issuer !== "https://discord.com") return siteRedirect({ auth_error: "oauth_issuer_invalid" }, true);
+  const state = params.get("state") ?? "";
+  if (!state || state !== cookieValue(req, "prime_police_oauth_state")) {
+    return siteRedirect({ auth_error: "oauth_state_invalid" }, true);
+  }
+  const code = params.get("code") ?? "";
+  if (!code || !DISCORD_OAUTH_CLIENT_SECRET) return siteRedirect({ auth_error: "oauth_not_configured" }, true);
+
+  try {
+    const tokenResponse = await fetch("https://discord.com/api/v10/oauth2/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: APPLICATION_ID,
+        client_secret: DISCORD_OAUTH_CLIENT_SECRET,
+        grant_type: "authorization_code",
+        code,
+        redirect_uri: DISCORD_OAUTH_CALLBACK,
+      }),
+    });
+    const tokenData = await tokenResponse.json().catch(() => null);
+    if (!tokenResponse.ok || !tokenData?.access_token) {
+      console.error("Discord OAuth token exchange failed:", tokenResponse.status);
+      return siteRedirect({ auth_error: "oauth_exchange_failed" }, true);
+    }
+
+    const identityResponse = await fetch("https://discord.com/api/v10/users/@me", {
+      headers: { Authorization: "Bearer " + tokenData.access_token },
+    });
+    const identity = await identityResponse.json().catch(() => null);
+    if (!identityResponse.ok || !/^\d{17,20}$/.test(String(identity?.id ?? ""))) {
+      return siteRedirect({ auth_error: "oauth_identity_failed" }, true);
+    }
+
+    const member = await discord("/guilds/" + GUILD_ID + "/members/" + encodeURIComponent(String(identity.id))) as any;
+    const roles: string[] = member?.roles ?? [];
+    if (!roles.some((role) => MANAGER_ROLE_IDS.has(role))) {
+      return siteRedirect({ auth_error: "role_not_authorized" }, true);
+    }
+
+    const oneTimeCode = randomLoginCode();
+    await db("police_panel_login_codes", {
+      method: "POST",
+      body: JSON.stringify({
+        code_hash: await sha256Hex(oneTimeCode),
+        discord_user_id: String(identity.id),
+        expires_at: new Date(Date.now() + 90 * 1000).toISOString(),
+      }),
+    });
+    return siteRedirect({ oauth_code: oneTimeCode }, true);
+  } catch (error) {
+    console.error("Discord OAuth login failed:", String(error));
+    return siteRedirect({ auth_error: "oauth_login_failed" }, true);
   }
 }
 
@@ -394,6 +510,8 @@ async function decide(req: Request) {
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS_HEADERS });
   const action = new URL(req.url).searchParams.get("panel");
+  if (action === "oauth-start" && req.method === "GET") return startDiscordOAuth();
+  if (action === "oauth-callback" && req.method === "GET") return await finishDiscordOAuth(req);
   if (action === "login" && req.method === "POST") return await login(req);
   if (action === "data" && req.method === "GET") return await listApplications(req);
   if (action === "decision" && req.method === "POST") return await decide(req);
@@ -415,11 +533,12 @@ Deno.serve(async (req: Request) => {
     return json({
       ok: true,
       service: "PRIME POLICE · Panel API",
-      login: "Genera un código con /panel_codigo en el servidor de Discord.",
+      login: "Inicio de sesión OAuth2 con Discord y comprobación de roles UCOP, Directiva, Gobierno, Staff y Dev Discord.",
+      oauth_redirect_uri: DISCORD_OAUTH_CALLBACK,
       commands_registered: commandsRegistered,
-      configured: { discord: Boolean(BOT_TOKEN), database: Boolean(SUPABASE_URL && SERVICE_KEY) },
+      configured: { discord: Boolean(BOT_TOKEN), database: Boolean(SUPABASE_URL && SERVICE_KEY), discord_oauth: Boolean(DISCORD_OAUTH_CLIENT_SECRET) },
       warning: commandsRegistered ? undefined : "La API está activa, pero no se pudieron actualizar los comandos de Discord.",
-      version: 2,
+      version: "discord-oauth-2026-10-27",
     });
   }
   return json({ error: "Método no permitido." }, 405);

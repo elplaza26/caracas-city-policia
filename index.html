@@ -43,12 +43,9 @@
       <div class="eyebrow">Acceso restringido</div>
       <h2>Entrar al panel policial</h2>
       <p>Solo el personal autorizado de PRIME POLICE puede consultar y resolver candidaturas.</p>
-      <div class="notice">En el servidor de Discord ejecuta <b>/panel_codigo</b>. El bot te enviará un código privado que caduca en 5 minutos y solo se puede usar una vez.</div>
-      <form id="loginForm">
-        <div class="field"><label for="loginCode">Código temporal de Discord</label><input id="loginCode" name="code" autocomplete="one-time-code" minlength="10" maxlength="10" placeholder="XXXXXXXXXX" required></div>
-        <div class="login-actions"><button id="loginButton" class="btn primary" type="submit">Acceder</button></div>
-        <div id="loginError" class="error" role="alert"></div>
-      </form>
+      <div class="notice">Inicia sesión con tu cuenta de Discord. El acceso se concede solo a miembros del servidor con roles autorizados de <b>UCOP, Directiva, Gobierno, Staff o Dev Discord</b>.</div>
+      <div class="login-actions"><button id="discordLoginButton" class="btn primary" type="button">Entrar con Discord</button></div>
+      <div id="loginError" class="error" role="alert"></div>
     </div>
   </section>
 
@@ -437,35 +434,19 @@ document.querySelectorAll("#rankRequestStatusTabs .tab").forEach(button=>button.
 document.querySelectorAll("#applicationStatusTabs .tab").forEach(button=>button.addEventListener("click",()=>{activeStatus=button.dataset.status;renderApplications();}));
 $("rankRequestSearch").addEventListener("input",renderRankRequests);
 $("refreshRankRequests").addEventListener("click",loadRankRequests);
-document.querySelectorAll(".workspace-tab").forEach(button=>button.addEventListener("click",()=>{const view=button.dataset.view,apps=view==="applications",rankReq=view==="rank-requests",sanctions=view==="sanctions",staff=view==="personnel",ranks=view==="ranks";$("sanctionsView").classList.toggle("hidden",!sanctions);$("rankRequestsView").classList.toggle("hidden",!rankReq);$("personnelView").classList.toggle("hidden",!staff);$("rankView").classList.toggle("hidden",!ranks);["applicationsIntro","applicationStats","applicationsToolbar","applicationStatusTabs"].forEach(id=>$(id).classList.toggle("hidden",!apps));$("candidateList").classList.toggle("hidden",!apps);document.querySelectorAll(".workspace-tab").forEach(b=>b.classList.toggle("active",b===button));$("workspaceTitle").textContent=button.dataset.title||button.textContent.trim();if(apps)loadApplications();if(rankReq)loadRankRequests();if(sanctions)loadSanctions();if(staff){loadPersonnel();loadRankConfig();}if(ranks){loadRankConfig();loadPersonnel();loadRankHistory();}}));$("loginForm").addEventListener("submit", async event => {
-  event.preventDefault();
+document.querySelectorAll(".workspace-tab").forEach(button=>button.addEventListener("click",()=>{const view=button.dataset.view,apps=view==="applications",rankReq=view==="rank-requests",sanctions=view==="sanctions",staff=view==="personnel",ranks=view==="ranks";$("sanctionsView").classList.toggle("hidden",!sanctions);$("rankRequestsView").classList.toggle("hidden",!rankReq);$("personnelView").classList.toggle("hidden",!staff);$("rankView").classList.toggle("hidden",!ranks);["applicationsIntro","applicationStats","applicationsToolbar","applicationStatusTabs"].forEach(id=>$(id).classList.toggle("hidden",!apps));$("candidateList").classList.toggle("hidden",!apps);document.querySelectorAll(".workspace-tab").forEach(b=>b.classList.toggle("active",b===button));$("workspaceTitle").textContent=button.dataset.title||button.textContent.trim();if(apps)loadApplications();if(rankReq)loadRankRequests();if(sanctions)loadSanctions();if(staff){loadPersonnel();loadRankConfig();}if(ranks){loadRankConfig();loadPersonnel();loadRankHistory();}}));$("discordLoginButton").addEventListener("click", () => {
   $("loginError").textContent = "";
-  $("loginButton").disabled = true;
-  $("loginButton").textContent = "Verificando…";
-  try {
-    const result = await request("login", {method:"POST",body:{code:$("loginCode").value.trim().toUpperCase()}});
-    token = result.token;
-    sessionStorage.setItem(TOKEN_KEY, token);
-    $("loginCode").value = "";
-    showApp();
-    await loadApplications();
-  } catch (error) {
-    $("loginError").textContent = error.message;
-  } finally {
-    $("loginButton").disabled = false;
-    $("loginButton").textContent = "Acceder";
-  }
-});
-$("loginCode").addEventListener("input", event => { event.target.value = event.target.value.toUpperCase().replace(/[^A-HJ-NP-Z2-9]/g, "").slice(0,10); });
-$("refreshButton").addEventListener("click", loadApplications);
+  window.location.assign(API_BASE + "?panel=oauth-start");
+});$("refreshButton").addEventListener("click", loadApplications);
 $("logoutButton").addEventListener("click", () => { showLogin(); $("loginError").textContent = ""; showToast("Sesión cerrada."); });
 $("search").addEventListener("input", () => renderApplications());
 
 const pageUrl = new URL(window.location.href);
-const codeFromUrl = pageUrl.searchParams.get("code");
-if (codeFromUrl) {
-  $("loginCode").value = codeFromUrl.toUpperCase().replace(/[^A-HJ-NP-Z2-9]/g, "").slice(0, 10);
-  pageUrl.searchParams.delete("code");
+const oauthCodeFromUrl = pageUrl.searchParams.get("oauth_code");
+const oauthErrorFromUrl = pageUrl.searchParams.get("auth_error");
+if (oauthCodeFromUrl || oauthErrorFromUrl) {
+  pageUrl.searchParams.delete("oauth_code");
+  pageUrl.searchParams.delete("auth_error");
   history.replaceState(null, "", pageUrl.pathname + pageUrl.search + pageUrl.hash);
 }
 async function checkConnection() {
@@ -480,6 +461,9 @@ async function checkConnection() {
     if (result.configured && (!result.configured.discord || !result.configured.database)) {
       $("connection").textContent = "● Faltan credenciales";
       $("connection").style.color = "#ffb2b9";
+    } else if (result.configured && result.configured.discord_oauth === false) {
+      $("connection").textContent = "● Falta OAuth de Discord";
+      $("connection").style.color = "#ffcf7b";
     } else if (result.commands_registered) {
       $("connection").textContent = "● API y comandos listos";
       $("connection").style.color = "#8de4bd";
@@ -493,7 +477,38 @@ async function checkConnection() {
   }
 }
 checkConnection();
-if (token) {
+if (oauthErrorFromUrl) {
+  const oauthMessages = {
+    oauth_not_configured: "Falta completar la configuración de inicio de sesión con Discord.",
+    oauth_cancelled: "Cancelaste el inicio de sesión con Discord.",
+    oauth_issuer_invalid: "Discord no pudo verificar la respuesta de inicio de sesión.",
+    oauth_state_invalid: "La sesión de inicio expiró o no coincide. Vuelve a intentarlo.",
+    oauth_exchange_failed: "Discord no pudo completar el inicio de sesión. Vuelve a intentarlo.",
+    oauth_identity_failed: "No se pudo verificar tu cuenta de Discord.",
+    role_not_authorized: "Tu cuenta no tiene un rol autorizado de UCOP, Directiva, Gobierno, Staff o Dev Discord.",
+    oauth_login_failed: "No se pudo iniciar sesión. Comprueba que estás en el servidor PRIME POLICE y vuelve a intentarlo."
+  };
+  showLogin();
+  $("loginError").textContent = oauthMessages[oauthErrorFromUrl] || "No se pudo completar el inicio de sesión con Discord.";
+} else if (oauthCodeFromUrl) {
+  showLogin();
+  $("discordLoginButton").disabled = true;
+  $("discordLoginButton").textContent = "Verificando Discord…";
+  $("loginError").textContent = "Comprobando tu cuenta y tus roles…";
+  request("login", {method:"POST",body:{code:oauthCodeFromUrl}}).then(async result => {
+    token = result.token;
+    sessionStorage.setItem(TOKEN_KEY, token);
+    $("loginError").textContent = "";
+    showApp();
+    await loadApplications();
+  }).catch(error => {
+    showLogin();
+    $("loginError").textContent = error.message || "El acceso expiró. Vuelve a entrar con Discord.";
+  }).finally(() => {
+    $("discordLoginButton").disabled = false;
+    $("discordLoginButton").textContent = "Entrar con Discord";
+  });
+} else if (token) {
   showApp();
   loadApplications();
 } else {

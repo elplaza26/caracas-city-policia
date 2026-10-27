@@ -4,6 +4,12 @@
 # working directory name when running `supabase init`.
 project_id = "PRIME-POLICE"
 
+[functions.prime-police-panel]
+verify_jwt = false
+
+[functions.prime-police-discord]
+verify_jwt = false
+
 [api]
 enabled = true
 # Port to use for the API URL.
