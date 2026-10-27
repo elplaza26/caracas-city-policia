@@ -513,6 +513,7 @@ Deno.serve(async (req: Request) => {
   if (action === "oauth-start" && req.method === "GET") return startDiscordOAuth();
   if (action === "oauth-callback" && req.method === "GET") return await finishDiscordOAuth(req);
   if (action === "login" && req.method === "POST") return await login(req);
+  if (action === "me" && req.method === "GET") return await currentUser(req);
   if (action === "data" && req.method === "GET") return await listApplications(req);
   if (action === "decision" && req.method === "POST") return await decide(req);
   if (action === "sanctions" && req.method === "GET") return await listSanctions(req);
@@ -552,6 +553,14 @@ const MANAGER_ROLE_IDS = new Set([
   "1539970134565982313", "1539970134544748562", "1539970134544748556",
   "1539970134544748557", "1539970134519578773", "1539970134519578774",
 ]);
+const MANAGER_ROLE_LABELS = new Map([
+  ["1539970134565982313", "Gobierno · Alta Directiva"],
+  ["1539970134544748562", "Directiva"],
+  ["1539970134544748556", "Staff"],
+  ["1539970134544748557", "Dev Discord"],
+  ["1539970134519578773", "UCOP · Asuntos Internos"],
+  ["1539970134519578774", "Directiva"],
+]);
 async function authorizedUser(req: Request): Promise<string | null> {
   const userId = await authenticate(req);
   if (!userId) return null;
@@ -561,6 +570,27 @@ async function authorizedUser(req: Request): Promise<string | null> {
   } catch (e) {
     console.error("Manager role verification failed:", String(e));
     return null;
+  }
+}
+
+async function currentUser(req: Request) {
+  const userId = await authorizedUser(req);
+  if (!userId) return json({ error: "Tu sesión expiró o ya no tienes un rol autorizado." }, 403);
+  try {
+    const member = await discord("/guilds/" + GUILD_ID + "/members/" + encodeURIComponent(userId)) as any;
+    const user = member?.user ?? {};
+    const username = String(user.username ?? "Discord");
+    const displayName = String(user.global_name ?? username);
+    const avatarHash = String(user.avatar ?? "");
+    const avatarUrl = avatarHash
+      ? "https://cdn.discordapp.com/avatars/" + userId + "/" + avatarHash + (avatarHash.startsWith("a_") ? ".gif" : ".png") + "?size=128"
+      : "https://cdn.discordapp.com/embed/avatars/" + String(Number((BigInt(userId) >> 22n) % 6n)) + ".png";
+    const roles: string[] = member?.roles ?? [];
+    const accessRoles = roles.filter((role) => MANAGER_ROLE_IDS.has(role)).map((role) => MANAGER_ROLE_LABELS.get(role) ?? "Gestión autorizada");
+    return json({ user: { id: userId, username, display_name: displayName, avatar_url: avatarUrl, access_roles: accessRoles } });
+  } catch (e) {
+    console.error("Discord profile lookup failed:", String(e));
+    return json({ error: "No se pudo cargar tu perfil de Discord." }, 502);
   }
 }
 
