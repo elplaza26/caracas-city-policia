@@ -4,6 +4,7 @@ import { handleHr } from "./hr.ts";
 const GUILD_ID = "1539970134469378068";
 const APPLICATION_CHANNEL_ID = "1539970136683847857";
 const RESULTS_CHANNEL_ID = "1564350390294552696";
+const RANK_AUDIT_CHANNEL_ID = "1539970137246142604";
 const POLICE_ROLE_ID = "1539970134482092038";
 const PRESELECTION_ROLE_ID = "1564685481457877012";
 const APPLICATION_ID = "1540484542354428025";
@@ -59,6 +60,20 @@ const discord = async (path: string, init: RequestInit = {}) => {
   if (!res.ok) throw new Error("Discord API " + res.status + ": " + JSON.stringify(body));
   return body;
 };
+
+async function postAuditLog(title: string, color: number, fields: Array<{ name: string; value: string }>) {
+  try {
+    await discord("/channels/" + RANK_AUDIT_CHANNEL_ID + "/messages", {
+      method: "POST",
+      body: JSON.stringify({
+        embeds: [{ title, color, fields: fields.map((field) => ({ name: field.name.slice(0, 256), value: field.value.slice(0, 1024), inline: true })), timestamp: new Date().toISOString(), footer: { text: "PRIME POLICE · Auditoría UCOP" } }],
+        allowed_mentions: { parse: [] },
+      }),
+    });
+  } catch (error) {
+    console.error("Audit log could not be posted:", String(error));
+  }
+}
 
 async function ensureSlashCommands() {
   const path = "/applications/" + APPLICATION_ID + "/guilds/" + GUILD_ID + "/commands";
@@ -398,6 +413,22 @@ async function decide(req: Request) {
         await db("police_personnel?on_conflict=discord_user_id", { method: "POST", headers: { Prefer: "resolution=ignore-duplicates,return=minimal" }, body: JSON.stringify({ discord_user_id: String(app.discord_user_id), discord_username: String(app.discord_username ?? ""), full_name: String(app.full_name ?? ""), source_application_id: app.id, status: "active" }) });
       } catch (e) { console.error("Personnel record creation failed:", String(e)); }
     }
+    let reviewerName = reviewerId;
+    try {
+      const reviewer = await discord("/guilds/" + GUILD_ID + "/members/" + encodeURIComponent(reviewerId)) as any;
+      reviewerName = String(reviewer.nick || reviewer.user?.global_name || reviewer.user?.username || reviewerId);
+    } catch (e) { console.error("Could not resolve application reviewer name:", String(e)); }
+    await postAuditLog(
+      action === "accept" ? "✅ Postulación aceptada" : "❌ Postulación rechazada",
+      action === "accept" ? 0x45b879 : 0xe87979,
+      [
+        { name: "Postulante", value: String(app.full_name || app.discord_username || "Sin nombre") },
+        { name: "Discord ID", value: String(app.discord_user_id) },
+        { name: "Decisión por", value: reviewerName },
+        { name: "Intento", value: String(app.attempt_number ?? 1) + "/3" },
+        ...(reason ? [{ name: "Motivo", value: reason }] : []),
+      ],
+    );
   } catch (e) {
     console.error("Panel decision database error:", String(e));
     return json({ error: "No se pudo guardar la decisión en la base de datos." }, 500);
