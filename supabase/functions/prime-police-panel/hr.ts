@@ -90,8 +90,8 @@ async function deletePersonnel(req: Request) {
   if (!validDiscordId(id)) return json({ error: "El ID de Discord no es válido." }, 400);
   try {
     const removed = await db("police_personnel?discord_user_id=eq." + enc(id), { method: "DELETE" });
-    if (!Array.isArray(removed) || !removed.length) return json({ error: "Ese agente ya no aparece en el registro UCOP." }, 404);
-    return json({ ok: true, message: "Agente eliminado del registro de personal UCOP." });
+    if (!Array.isArray(removed) || !removed.length) return json({ error: "Ese agente ya no aparece en el registro de personal." }, 404);
+    return json({ ok: true, message: "Agente eliminado del registro de personal." });
   } catch (error) {
     console.error("Personnel deletion error:", String(error));
     return json({ error: "No se pudo eliminar al agente del registro." }, 500);
@@ -104,8 +104,9 @@ async function registerPersonnel(req: Request) {
   const nameIc = String(body?.full_name ?? "").trim().slice(0, 100);
   const nameOoc = String(body?.name_ooc ?? "").trim().slice(0, 100);
   const plate = String(body?.plate ?? "").trim().slice(0, 30);
+  const unit = String(body?.unit ?? "UCOP").trim().toUpperCase();
   const rankRoleId = String(body?.rank_role_id ?? "").trim();
-  if (!validDiscordId(id) || !validDiscordId(rankRoleId) || !nameIc || !nameOoc || !plate) return json({ error: "Completa placa, nombre IC, nombre OOC, Discord y rango." }, 400);
+  if (!validDiscordId(id) || !validDiscordId(rankRoleId) || !nameIc || !nameOoc || !plate || !["UCOP", "CIC"].includes(unit)) return json({ error: "Completa placa, nombre IC, nombre OOC, Discord, unidad UCOP/CIC y rango." }, 400);
   let member: any; let oldRoles: string[] = []; let addedTargetRole = false;
   try {
     const [guildMember, profiles, configuredRanks] = await Promise.all([
@@ -115,7 +116,7 @@ async function registerPersonnel(req: Request) {
     ]);
     member = guildMember as any;
     const rank = (configuredRanks ?? []).find((item: any) => item.role_id === rankRoleId);
-    if (!rank) return json({ error: "Configura primero la escala y elige un rango de UCOP válido." }, 400);
+    if (!rank) return json({ error: "Configura primero la escala y elige un rango válido." }, 400);
     const memberRoles: string[] = member.roles ?? [];
     if (!memberRoles.includes(POLICE_ROLE_ID)) return json({ error: "El agente debe tener el rol base de Policía para registrarlo." }, 409);
     if (memberRoles.includes(EXPELLED_ROLE_ID)) return json({ error: "No se puede registrar a una persona con el rol de expulsado." }, 409);
@@ -125,7 +126,7 @@ async function registerPersonnel(req: Request) {
     for (const roleId of oldRoles) await discord("/guilds/" + GUILD_ID + "/members/" + enc(id) + "/roles/" + roleId, { method: "DELETE" });
     const username = String(member.user?.global_name || member.user?.username || id);
     const now = new Date().toISOString();
-    const rows = await db("police_personnel?on_conflict=discord_user_id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=representation" }, body: JSON.stringify({ discord_user_id: id, discord_username: username, full_name: nameIc, name_ooc: nameOoc, plate, unit: "UCOP", rank_name: String(rank.role_name), rank_role_id: rankRoleId, source_application_id: existing.source_application_id ?? null, status: "active", updated_at: now, last_rank_change_at: now }) });
+    const rows = await db("police_personnel?on_conflict=discord_user_id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=representation" }, body: JSON.stringify({ discord_user_id: id, discord_username: username, full_name: nameIc, name_ooc: nameOoc, plate, unit, rank_name: String(rank.role_name), rank_role_id: rankRoleId, source_application_id: existing.source_application_id ?? null, status: "active", updated_at: now, last_rank_change_at: now }) });
     return json({ ok: true, personnel: rows?.[0] ?? null });
   } catch (error) {
     console.error("Personnel register error:", String(error));

@@ -24,11 +24,11 @@ const response=(type:number,data:any)=>json({type,data});
 const ephemeral=(content:string)=>response(4,{content,flags:64});
 const input=(id:string,label:string,placeholder:string,required=true,style=2)=>({type:4,custom_id:id,label,style,placeholder,min_length:1,max_length:style===1?100:1000,required});
 function modal(){return response(9,{custom_id:"prime_application_submit",title:"Postulación · PRIME POLICE",components:[
- {type:1,components:[input("personal","Datos IC / OOC","Nombre IC: ... | Nombre OOC: ... | Edad OOC: ... | Discord: ...")]},
- {type:1,components:[input("experience_time","Experiencia y tiempo en RolePlay","¿Experiencia policial previa? Descríbela y di cuánto llevas en RP")]},
- {type:1,components:[input("goal_preference","Meta y preferencia","¿Meta dentro de la Policía? ¿Disfrutas más PVP o RolePlay?")]},
- {type:1,components:[input("expectations_why","Expectativas y motivación","¿Qué esperas de la Policía y por qué quieres unirte?")]},
- {type:1,components:[input("rules_accepted","Normativa de PRIME POLICE","¿Has leído y aceptas las normas de PRIME POLICE y del servidor? Escribe Sí o No",true,1)]}
+ {type:1,components:[input("character_info","Datos del personaje","Formato: Nombre IC: ... | Edad IC: ... | Historia breve: ...")]},
+ {type:1,components:[input("motivation","Motivación policial","¿Por qué quiere entrar tu personaje y qué aportará a PRIME POLICE?")]},
+ {type:1,components:[input("control_scenario","Control policial","Un conductor no colabora: ¿cómo actúa tu personaje y cómo escala la situación?")]},
+ {type:1,components:[input("team_scenario","Trabajo en equipo","Un agente se salta el protocolo: ¿cómo responde tu personaje sin romper el rol?")]},
+ {type:1,components:[input("availability_rules","Disponibilidad y normas","Días y horas disponibles; escribe ACEPTO para confirmar que leíste las normas.")]}
 ]})}
 function values(interaction:any){const out:any={};for(const row of interaction.data?.components||[])for(const c of row.components||[])out[c.custom_id]=String(c.value||"").trim();return out}
 async function handle(i:any){
@@ -56,14 +56,14 @@ async function handle(i:any){
   return ephemeral("Interacción no reconocida.");
  }
  if(i.type===5&&i.data?.custom_id==="prime_application_submit"){
-  const a=values(i);const personal=a.personal||"";
-  if(!personal||!a.experience_time||!a.goal_preference||!a.expectations_why||!a.rules_accepted)return ephemeral("Completa todos los apartados antes de enviar.");
-  const answer={personal,experience_time:a.experience_time,goal_preference:a.goal_preference,expectations_why:a.expectations_why,rules_accepted:a.rules_accepted};
-  const submitted=await db("rpc/submit_police_application",{method:"POST",body:JSON.stringify({p_discord_user_id:userId,p_discord_username:username,p_full_name:personal.slice(0,200),p_previous_experience:a.experience_time,p_motivation:a.expectations_why,p_answers:answer})});
+  const a=values(i);const personal=a.character_info||"";const characterName=(personal.split(/\r?\n|\|/)[0].replace(/^Nombre IC:\s*/i,"").trim()||personal).slice(0,100);
+  if(!personal||!a.motivation||!a.control_scenario||!a.team_scenario||!a.availability_rules)return ephemeral("Completa todos los apartados antes de enviar.");
+  const answer={character_info:personal,motivation:a.motivation,control_scenario:a.control_scenario,team_scenario:a.team_scenario,availability_rules:a.availability_rules};
+  const submitted=await db("rpc/submit_police_application",{method:"POST",body:JSON.stringify({p_discord_user_id:userId,p_discord_username:username,p_full_name:characterName,p_previous_experience:a.motivation,p_motivation:a.motivation,p_answers:answer})});
   if(!submitted?.ok)return ephemeral(String(submitted?.message||"No se pudo aceptar la postulación."));
   const app=submitted.application;
 
-  const embed={title:"📋 Nueva postulación · PRIME POLICE",description:"**Solicitante:** <@"+userId+">\n**Intento:** "+submitted.attempt_number+" de 3",fields:[{name:"Datos IC / OOC",value:personal.slice(0,1000)},{name:"Experiencia y tiempo en RP",value:a.experience_time.slice(0,1000)},{name:"Meta y preferencia",value:a.goal_preference.slice(0,1000)},{name:"Expectativas y motivación",value:a.expectations_why.slice(0,1000)},{name:"Acepta la normativa",value:a.rules_accepted.slice(0,1000)}],color:14264415,footer:{text:"ID: "+String(app.id)+" · Intento "+submitted.attempt_number+"/3 · Revisar desde el panel web"}};
+  const embed={title:"📋 Nueva postulación · PRIME POLICE",description:"**Solicitante:** <@"+userId+">\n**Intento:** "+submitted.attempt_number+" de 3",fields:[{name:"Datos del personaje",value:personal.slice(0,1000)},{name:"Motivación policial",value:a.motivation.slice(0,1000)},{name:"Control policial",value:a.control_scenario.slice(0,1000)},{name:"Trabajo en equipo",value:a.team_scenario.slice(0,1000)},{name:"Disponibilidad y normas",value:a.availability_rules.slice(0,1000)}],color:14264415,footer:{text:"ID: "+String(app.id)+" · Intento "+submitted.attempt_number+"/3 · Revisar desde el panel web"}};
   try{const posted=await discord("/channels/"+APPLICATION_CHANNEL_ID+"/messages",{method:"POST",body:JSON.stringify({embeds:[embed]})}) as any;if(posted?.id)await db("police_applications?id=eq."+encodeURIComponent(String(app.id)),{method:"PATCH",body:JSON.stringify({discord_message_id:String(posted.id)})});}
   catch(error){console.error("Could not publish application intake message:",String(error));return ephemeral("Tu postulación quedó guardada, pero no se pudo publicar el aviso en el canal. Contacta con un administrador para confirmar su recepción.");}
   return ephemeral("¡Postulación recibida! Este es tu intento "+submitted.attempt_number+" de 3. El equipo de PRIME POLICE la revisará y comunicará el resultado en el canal correspondiente.");
