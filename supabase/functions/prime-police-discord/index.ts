@@ -137,7 +137,7 @@ async function handle(i:any){
  if(i.type===5&&i.data?.custom_id==="prime_rank_request_submit"){
   const a=values(i);
   EdgeRuntime.waitUntil((async()=>{try{await processRankRequest(i,userId,username,a);}catch(error){console.error("Could not process rank request:",String(error));try{await editInteractionReply(i,"No se pudo completar la solicitud de rango. Contacta con UCOP antes de volver a enviarla.");}catch(replyError){console.error("Could not update rank request interaction:",String(replyError));}}})());
-  return response(5,{data:{flags:64}});
+  return response(5,{data:{}});
  }
  if(i.type===5&&i.data?.custom_id==="prime_application_submit"){
   const a=values(i);const personal=a.character_info||"";
