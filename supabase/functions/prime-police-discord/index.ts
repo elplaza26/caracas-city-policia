@@ -27,8 +27,8 @@ function modal(){return response(9,{custom_id:"prime_application_submit",title:"
  {type:1,components:[input("character_info","Historia del personaje","Nombre IC: ... | Edad IC: ... | Historia breve: ...")]},
  {type:1,components:[input("motivation","Motivación y perfil","¿Por qué quieres entrar? Di una fortaleza y algo que quieras mejorar.")]},
  {type:1,components:[input("detention_rights","Detención y derechos","Llevas a una persona detenida a comisaría: ¿qué derechos le lees y cuándo, según la normativa?")]},
- {type:1,components:[input("emergency_scenario","Accidente con heridos","Llegas a un accidente con heridos. ¿Qué haces primero y cómo coordinas la atención?")]},
- {type:1,components:[input("roleplay_response","Respuesta en rol","Un civil te insulta en una intervención. ¿Cómo respondes usando /me y /do sin perder la calma?")]}
+ {type:1,components:[input("scene_resolution","Escena de roleplay","Una escena se tensa entre varios personajes. ¿Cómo ayudas a resolverla sin imponer el resultado?")]},
+ {type:1,components:[input("roleplay_response","Uso de /me y /do","Otro personaje provoca al tuyo. Escribe una respuesta con /me y /do que mantenga la escena sin escalarla.")]}
 ]})}
 function values(interaction:any){const out:any={};for(const row of interaction.data?.components||[])for(const c of row.components||[])out[c.custom_id]=String(c.value||"").trim();return out}
 async function handle(i:any){
@@ -57,13 +57,13 @@ async function handle(i:any){
  }
  if(i.type===5&&i.data?.custom_id==="prime_application_submit"){
   const a=values(i);const personal=a.character_info||"";const characterName=(personal.split(/\r?\n|\|/)[0].replace(/^Nombre IC:\s*/i,"").trim()||personal).slice(0,100);
-  if(!personal||!a.motivation||!a.detention_rights||!a.emergency_scenario||!a.roleplay_response)return ephemeral("Completa todos los apartados antes de enviar.");
-  const answer={character_info:personal,motivation:a.motivation,detention_rights:a.detention_rights,emergency_scenario:a.emergency_scenario,roleplay_response:a.roleplay_response};
+  if(!personal||!a.motivation||!a.detention_rights||!a.scene_resolution||!a.roleplay_response)return ephemeral("Completa todos los apartados antes de enviar.");
+  const answer={character_info:personal,motivation:a.motivation,detention_rights:a.detention_rights,scene_resolution:a.scene_resolution,roleplay_response:a.roleplay_response};
   const submitted=await db("rpc/submit_police_application",{method:"POST",body:JSON.stringify({p_discord_user_id:userId,p_discord_username:username,p_full_name:characterName,p_previous_experience:a.motivation,p_motivation:a.motivation,p_answers:answer})});
   if(!submitted?.ok)return ephemeral(String(submitted?.message||"No se pudo aceptar la postulación."));
   const app=submitted.application;
 
-  const embed={title:"📋 Nueva postulación · PRIME POLICE",description:"**Solicitante:** <@"+userId+">\n**Intento:** "+submitted.attempt_number+" de 3",fields:[{name:"Historia del personaje",value:personal.slice(0,1000)},{name:"Motivación y aporte",value:a.motivation.slice(0,1000)},{name:"Detención y derechos",value:a.detention_rights.slice(0,1000)},{name:"Accidente con heridos",value:a.emergency_scenario.slice(0,1000)},{name:"Respuesta en rol",value:a.roleplay_response.slice(0,1000)}],color:14264415,footer:{text:"ID: "+String(app.id)+" · Intento "+submitted.attempt_number+"/3 · Revisar desde el panel web"}};
+  const embed={title:"📋 Nueva postulación · PRIME POLICE",description:"**Solicitante:** <@"+userId+">\n**Intento:** "+submitted.attempt_number+" de 3",fields:[{name:"Historia del personaje",value:personal.slice(0,1000)},{name:"Motivación y aporte",value:a.motivation.slice(0,1000)},{name:"Detención y derechos",value:a.detention_rights.slice(0,1000)},{name:"Escena de roleplay",value:a.scene_resolution.slice(0,1000)},{name:"Uso de /me y /do",value:a.roleplay_response.slice(0,1000)}],color:14264415,footer:{text:"ID: "+String(app.id)+" · Intento "+submitted.attempt_number+"/3 · Revisar desde el panel web"}};
   try{const posted=await discord("/channels/"+APPLICATION_CHANNEL_ID+"/messages",{method:"POST",body:JSON.stringify({embeds:[embed]})}) as any;if(posted?.id)await db("police_applications?id=eq."+encodeURIComponent(String(app.id)),{method:"PATCH",body:JSON.stringify({discord_message_id:String(posted.id)})});}
   catch(error){console.error("Could not publish application intake message:",String(error));return ephemeral("Tu postulación quedó guardada, pero no se pudo publicar el aviso en el canal. Contacta con un administrador para confirmar su recepción.");}
   return ephemeral("¡Postulación recibida! Este es tu intento "+submitted.attempt_number+" de 3. El equipo de PRIME POLICE la revisará y comunicará el resultado en el canal correspondiente.");
