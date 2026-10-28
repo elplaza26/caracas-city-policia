@@ -337,6 +337,7 @@ async function decide(req: Request) {
 
   let app: any;
   let finalApp: any;
+  let preselectionSynced = true;
   try {
     const rows = await db(
       "police_applications?select=*&id=eq." + encodeURIComponent(id) + "&limit=1",
@@ -410,8 +411,8 @@ async function decide(req: Request) {
     finalApp = updated[0];
     if (action === "accept") {
       try {
-        await db("police_personnel?on_conflict=discord_user_id", { method: "POST", headers: { Prefer: "resolution=ignore-duplicates,return=minimal" }, body: JSON.stringify({ discord_user_id: String(app.discord_user_id), discord_username: String(app.discord_username ?? ""), full_name: String(app.full_name ?? ""), source_application_id: app.id, status: "active" }) });
-      } catch (e) { console.error("Personnel record creation failed:", String(e)); }
+        await db("police_preselections?on_conflict=discord_user_id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify({ discord_user_id: String(app.discord_user_id), discord_username: String(app.discord_username ?? ""), full_name: String(app.full_name ?? ""), source_application_id: app.id, status: "active", accepted_at: finalApp.reviewed_at ?? new Date().toISOString(), updated_at: new Date().toISOString() }) });
+      } catch (e) { preselectionSynced = false; console.error("Preselection record creation failed:", String(e)); }
     }
     let reviewerName = reviewerId;
     try {
@@ -534,7 +535,9 @@ async function decide(req: Request) {
     role_assigned: action === "accept" && Boolean(finalApp.role_assigned_at),
     discord_synced: discordSynced,
     results_notified: resultsNotified,
-    warning: discordSynced && resultsNotified ? undefined : "La decisión se guardó, pero Discord no confirmó todos los mensajes.",
+    warning: !preselectionSynced
+      ? "La candidatura se aceptó, pero no se guardó en la base de preseleccionados. Avísale a un administrador para revisar el registro."
+      : discordSynced && resultsNotified ? undefined : "La decisión se guardó, pero Discord no confirmó todos los mensajes.",
   });
 }
 

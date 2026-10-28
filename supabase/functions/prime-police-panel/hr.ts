@@ -105,6 +105,17 @@ async function allowed(req: Request) {
   } catch (error) { console.error("Personnel list error:", String(error)); return json({ error: "No se pudo cargar la base de personal." }, 500); }
 }
 
+async function listPreselections(req: Request) {
+  const auth = await allowed(req); if (auth.error) return auth.error;
+  try {
+    const rows = await db("police_preselections?select=discord_user_id,discord_username,full_name,source_application_id,status,accepted_at&status=eq.active&order=accepted_at.desc&limit=500");
+    return json({ ok: true, preselections: rows ?? [] });
+  } catch (error) {
+    console.error("Preselection list error:", String(error));
+    return json({ error: "No se pudo cargar la base de preseleccionados." }, 500);
+  }
+}
+
 async function deletePersonnel(req: Request) {
   const auth = await allowed(req); if (auth.error) return auth.error;
   let body: any; try { body = await req.json(); } catch { return json({ error: "Solicitud inválida." }, 400); }
@@ -329,7 +340,14 @@ async function reviewRankRequest(req: Request) {
           }
         }
       }
-      if (memberRoles.includes(PRESELECTION_ROLE_ID)) { try { await discord("/guilds/" + GUILD_ID + "/members/" + enc(String(rankRequest.discord_user_id)) + "/roles/" + PRESELECTION_ROLE_ID, { method: "DELETE" }); } catch (error) { console.error("Could not remove preselection role after rank approval:", String(error)); } }
+      if (memberRoles.includes(PRESELECTION_ROLE_ID)) {
+        const convertedAt = new Date().toISOString();
+        await db("police_preselections?discord_user_id=eq." + enc(String(rankRequest.discord_user_id)) + "&status=eq.active", {
+          method: "PATCH",
+          body: JSON.stringify({ status: "converted", converted_at: convertedAt, updated_at: convertedAt }),
+        });
+        try { await discord("/guilds/" + GUILD_ID + "/members/" + enc(String(rankRequest.discord_user_id)) + "/roles/" + PRESELECTION_ROLE_ID, { method: "DELETE" }); } catch (error) { console.error("Could not remove preselection role after rank approval:", String(error)); }
+      }
     }
 
     const now = new Date().toISOString();
@@ -464,6 +482,7 @@ async function changeRank(req: Request) {
 
 export async function handleHr(req: Request, action: string): Promise<Response | null> {
   if (action === "personnel" && req.method === "GET") return await listPersonnel(req);
+  if (action === "preselections" && req.method === "GET") return await listPreselections(req);
   if (action === "personnel-register" && req.method === "POST") return await registerPersonnel(req);
   if (action === "personnel-delete" && req.method === "POST") return await deletePersonnel(req);
   if (action === "rank-config" && req.method === "GET") return await rankConfig(req);

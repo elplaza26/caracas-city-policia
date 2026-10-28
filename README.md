@@ -4,9 +4,10 @@ Panel privado de gestión de personal de PRIME POLICE, orientado a UCOP y RR. HH
 
 ## Módulos
 
-- **Postulaciones:** revisión de respuestas, aceptación o rechazo y asignación del rol de Policía al aceptar.
+- **Postulaciones:** revisión de respuestas, aceptación o rechazo y asignación del rol de Preselección al aceptar.
 - **Solicitudes de rango:** revisión de las solicitudes enviadas por el personal desde Discord.
-- **Personal UCOP:** fichas con nombre IC/OOC, placa, usuario de Discord, rango, unidad y estado; búsqueda, filtros y expediente individual.
+- **Preseleccionados:** base independiente para personas aceptadas que todavía no han ingresado en la Policía.
+- **Personal de Policía:** fichas con nombre IC/OOC, placa, usuario de Discord, rango, unidad y estado; búsqueda, filtros y expediente individual.
 - **Ascensos y descensos:** configuración de la escala a partir de roles de Discord, cambios de rango, motivo e historial de auditoría.
 - **Sanciones:** registro de Warn y Strike, motivo y evidencia, publicación en sus canales, sincronización de roles e historial. El tercer Strike asigna Expulsado y retira Policía; no expulsa del servidor.
 
@@ -38,4 +39,4 @@ Los rangos se configuran dentro del panel: abre **Ascensos y descensos**, añade
 - `supabase/functions/prime-police-panel/index.ts`: acceso, postulaciones, decisiones y sanciones.
 - `supabase/functions/prime-police-panel/hr.ts`: personal, solicitudes de rango, jerarquía e historial.
 - `supabase/functions/prime-police-discord/index.ts`: comandos e interacciones de Discord.
-- `supabase/migrations/`: esquema de postulaciones, personal, rangos, solicitudes e historial.
+- `supabase/migrations/`: esquema de postulaciones, preseleccionados, personal, rangos, solicitudes e historial.

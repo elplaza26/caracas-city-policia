@@ -40,9 +40,10 @@
     <nav id="sideNav" class="side-nav">
       <button class="workspace-tab active" data-view="applications" data-title="Postulaciones"><span>01</span> Postulaciones</button>
       <button class="workspace-tab" data-view="rank-requests" data-title="Solicitudes de rango"><span>02</span> Solicitudes de rango</button>
-      <button class="workspace-tab" data-view="personnel" data-title="Personal UCOP"><span>03</span> Personal UCOP</button>
-      <button class="workspace-tab" data-view="ranks" data-title="Ascensos y descensos"><span>04</span> Ascensos y descensos</button>
-      <button class="workspace-tab" data-view="sanctions" data-title="Sanciones UCOP"><span>05</span> Sanciones UCOP</button>
+      <button class="workspace-tab" data-view="preselections" data-title="Preseleccionados"><span>03</span> Preseleccionados</button>
+      <button class="workspace-tab" data-view="personnel" data-title="Personal de Policía"><span>04</span> Personal de Policía</button>
+      <button class="workspace-tab" data-view="ranks" data-title="Ascensos y descensos"><span>05</span> Ascensos y descensos</button>
+      <button class="workspace-tab" data-view="sanctions" data-title="Sanciones UCOP"><span>06</span> Sanciones UCOP</button>
     </nav>
     <div class="sidebar-bottom">
       <div id="connection" class="connection">Comprobando conexión…</div>
@@ -100,8 +101,16 @@
       <div id="rankRequestList" class="candidate-list"><div class="empty">Carga las solicitudes de rango.</div></div>
     </section>
 
+    <section id="preselectionsView" class="hidden">
+      <div class="toolbar personnel-heading"><div><div class="eyebrow">RECLUTAMIENTO · UCOP</div><h2>Base de datos de preseleccionados</h2><p class="muted">Personas aceptadas que todavía están pendientes de entrevista IC e ingreso como policías. Al aprobar su solicitud de rango, pasan al registro independiente de Personal de Policía.</p></div><div class="personnel-heading-actions"><span class="badge pending">Preselección</span><button id="refreshPreselections" class="btn" type="button">Actualizar</button></div></div>
+      <div class="personnel-stats"><div class="stat"><span>Preseleccionados pendientes</span><strong id="preselectionTotalStat">0</strong></div></div>
+      <div class="toolbar personnel-list-heading"><div><div class="eyebrow">RECLUTAMIENTO UCOP</div><h2>Personas aceptadas <span id="preselectionCount" class="muted"></span></h2></div></div>
+      <div class="personnel-filters" style="grid-template-columns:minmax(260px,1fr)"><input id="preselectionSearch" class="search" type="search" placeholder="Buscar por nombre o Discord…"></div>
+      <div class="table-wrap"><table class="personnel-table"><thead><tr><th>Nombre IC</th><th>Discord</th><th>Fecha de aceptación</th><th>Estado</th></tr></thead><tbody id="preselectionRows"><tr><td colspan="4" class="muted">Carga la base de preseleccionados.</td></tr></tbody></table></div>
+    </section>
+
     <section id="personnelView" class="hidden">
-      <div class="toolbar personnel-heading"><div><div class="eyebrow">UCOP · ASUNTOS INTERNOS</div><h2>Base de datos de personal</h2><p class="muted">Expedientes del personal UCOP, rangos y estado de servicio.</p></div><div class="personnel-heading-actions"><span class="badge accepted">Unidad UCOP</span><button id="newPersonnelButton" class="btn primary" type="button">＋ Nuevo agente</button></div></div>
+      <div class="toolbar personnel-heading"><div><div class="eyebrow">UCOP · ASUNTOS INTERNOS</div><h2>Base de datos de personal policial</h2><p class="muted">Solo agentes que ya recibieron el rol de Policía; incluye rangos, placa y estado de servicio.</p></div><div class="personnel-heading-actions"><span class="badge accepted">Policía · UCOP</span><button id="newPersonnelButton" class="btn primary" type="button">＋ Nuevo agente</button></div></div>
       <div class="personnel-stats"><div class="stat"><span>Personal registrado</span><strong id="personnelTotalStat">0</strong></div><div class="stat"><span>Activos</span><strong id="personnelActiveStat">0</strong></div><div class="stat"><span>Inactivos</span><strong id="personnelInactiveStat">0</strong></div></div>
       <div id="personRegisterPanel" class="panel hidden">
         <div class="toolbar"><div><div class="eyebrow">UCOP · ASUNTOS INTERNOS</div><h2 id="personFormTitle">Registrar agente</h2></div><span class="badge accepted">Unidad UCOP</span></div>
@@ -117,7 +126,7 @@
           <div class="personnel-form-actions"><button id="personnelButton" class="btn primary" type="submit">Registrar agente</button><button id="cancelPersonnelForm" class="btn ghost" type="button">Cancelar</button></div>
         </form>
       </div>
-      <div class="toolbar personnel-list-heading"><div><div class="eyebrow">Roster UCOP</div><h2>Personal <span id="personnelCount" class="muted"></span></h2></div><button id="refreshPersonnel" class="btn" type="button">Actualizar</button></div>
+      <div class="toolbar personnel-list-heading"><div><div class="eyebrow">ROSTER POLICIAL UCOP</div><h2>Personal de Policía <span id="personnelCount" class="muted"></span></h2></div><button id="refreshPersonnel" class="btn" type="button">Actualizar</button></div>
       <div class="personnel-filters"><input id="personnelSearch" class="search" type="search" placeholder="Buscar por nombre, placa o Discord…"><select id="personnelRankFilter" class="search"><option value="">Todos los rangos</option></select><select id="personnelStatusFilter" class="search"><option value="">Todos los estados</option><option value="active">Activo</option><option value="inactive">Inactivo</option></select></div>
       <div class="table-wrap"><table class="personnel-table"><thead><tr><th>Placa</th><th>Nombre IC</th><th>Nombre OOC</th><th>Discord</th><th>Rango</th><th>Unidad</th><th>Estado</th><th>Última actualización</th><th>Acciones</th></tr></thead><tbody id="personnelRows"><tr><td colspan="9" class="muted">Carga la base de personal UCOP.</td></tr></tbody></table></div>
     </section>
@@ -178,6 +187,7 @@ let activeRankRequestStatus = "pending";
 let token = sessionStorage.getItem(TOKEN_KEY) || "";
 let applications = [];
 let rankRequests = [];
+let preselections = [];
 let sanctions = [];
 let personnel = [];
 let editingPersonnelId = null;
@@ -213,7 +223,7 @@ async function request(action, options) {
   const headers = {"Content-Type":"application/json"};
   if (token && action !== "login") headers.Authorization = "Bearer " + token;
   const response = await fetch(API_BASE + "?panel=" + encodeURIComponent(action), {
-    method: options.method || (["data","me","personnel","rank-config","rank-history","rank-requests","sanctions"].includes(action) ? "GET" : "POST"),
+    method: options.method || (["data","me","personnel","preselections","rank-config","rank-history","rank-requests","sanctions"].includes(action) ? "GET" : "POST"),
     headers,
     body: options.body ? JSON.stringify(options.body) : undefined
   });
@@ -363,6 +373,20 @@ async function loadApplications() {
     $("refreshButton").textContent = "Actualizar";
   }
 }
+function renderPreselections() {
+  const rows=$("preselectionRows"),query=$("preselectionSearch").value.trim().toLocaleLowerCase("es");
+  const visible=preselections.filter(person=>[person.full_name,person.discord_username,person.discord_user_id].join(" ").toLocaleLowerCase("es").includes(query));
+  $("preselectionTotalStat").textContent=String(preselections.length);
+  $("preselectionCount").textContent="· "+visible.length+(visible.length===preselections.length?"":" de "+preselections.length)+" personas";
+  rows.replaceChildren();
+  if(!visible.length){const tr=document.createElement("tr"),td=document.createElement("td");td.colSpan=4;td.className="muted";td.textContent=preselections.length?"No hay preseleccionados que coincidan con la búsqueda.":"No hay personas pendientes de pasar a Personal de Policía.";tr.append(td);rows.append(tr);return;}
+  visible.forEach(person=>{const tr=document.createElement("tr");[person.full_name||"Sin nombre IC",(person.discord_username?"@"+person.discord_username+" · ":"")+person.discord_user_id,niceDate(person.accepted_at)].forEach(value=>{const td=document.createElement("td");td.textContent=value;tr.append(td);});const state=document.createElement("td"),badge=document.createElement("span");badge.className="badge pending";badge.textContent="Preseleccionado";state.append(badge);tr.append(state);rows.append(tr);});
+}
+async function loadPreselections(){
+  const rows=$("preselectionRows");rows.innerHTML='<tr><td colspan="4" class="muted">Cargando preseleccionados…</td></tr>';
+  try{const result=await request("preselections");preselections=result.preselections||[];renderPreselections();}
+  catch(error){rows.replaceChildren();const tr=document.createElement("tr"),td=document.createElement("td");td.colSpan=4;td.className="muted";td.textContent=error.message;tr.append(td);rows.append(tr);}
+}
 function renderRankRequests() {
   const list=$("rankRequestList");list.replaceChildren();
   const query=$("rankRequestSearch").value.trim().toLocaleLowerCase("es");
@@ -406,7 +430,7 @@ async function reviewRankRequest(item,decision,button) {
   if(!confirm("¿Confirmas "+verb+" a "+item.character_name+" ("+item.plate+")"+(policeOnly?" sin rango por ahora":" con el rango "+item.requested_rank_name)+"? UCOP debe comprobar la entrevista IC y el nombre indicado en «Aprobado por»."))return;
   const reason=decision==="reject"?(prompt("Observación del rechazo (opcional):","")||""):"";
   button.disabled=true;button.textContent="Procesando…";
-  try{const result=await request("rank-request-review",{method:"POST",body:{id:item.id,decision,reason}});showToast(result.message||"Solicitud revisada.");await Promise.all([loadRankRequests(),loadPersonnel()]);}
+  try{const result=await request("rank-request-review",{method:"POST",body:{id:item.id,decision,reason}});showToast(result.message||"Solicitud revisada.");await Promise.all([loadRankRequests(),loadPersonnel(),loadPreselections()]);}
   catch(error){showToast(error.message);button.disabled=false;button.textContent=decision==="accept"?(policeOnly?"Aprobar y asignar Policía":"Aprobar Policía + rango"):"Rechazar";}
 }
 async function decide(app, action, button) {
@@ -505,11 +529,12 @@ $("sanctionForm").addEventListener("submit", async event => {
 $("refreshSanctions").addEventListener("click",loadSanctions);
 $("sanctionSearch").addEventListener("input",renderSanctions);$("sanctionStatusFilter").addEventListener("change",renderSanctions);
 $("sanctionDiscordId").addEventListener("change",()=>{const agent=personnel.find(p=>p.discord_user_id===$("sanctionDiscordId").value);$("sanctionTargetName").value=agent?.full_name||"";$("sanctionPlate").value=agent?.plate||"";});
+$("refreshPreselections").addEventListener("click",loadPreselections);$("preselectionSearch").addEventListener("input",renderPreselections);
 document.querySelectorAll("#rankRequestStatusTabs .tab").forEach(button=>button.addEventListener("click",()=>{activeRankRequestStatus=button.dataset.rankStatus;renderRankRequests();}));
 document.querySelectorAll("#applicationStatusTabs .tab").forEach(button=>button.addEventListener("click",()=>{activeStatus=button.dataset.status;renderApplications();}));
 $("rankRequestSearch").addEventListener("input",renderRankRequests);
 $("refreshRankRequests").addEventListener("click",loadRankRequests);
-document.querySelectorAll(".workspace-tab").forEach(button=>button.addEventListener("click",()=>{const view=button.dataset.view,apps=view==="applications",rankReq=view==="rank-requests",sanctions=view==="sanctions",staff=view==="personnel",ranks=view==="ranks";$("sanctionsView").classList.toggle("hidden",!sanctions);$("rankRequestsView").classList.toggle("hidden",!rankReq);$("personnelView").classList.toggle("hidden",!staff);$("rankView").classList.toggle("hidden",!ranks);["applicationsIntro","applicationStats","applicationsToolbar","applicationStatusTabs"].forEach(id=>$(id).classList.toggle("hidden",!apps));$("candidateList").classList.toggle("hidden",!apps);document.querySelectorAll(".workspace-tab").forEach(b=>b.classList.toggle("active",b===button));$("workspaceTitle").textContent=button.dataset.title||button.textContent.trim();if(apps)loadApplications();if(rankReq)loadRankRequests();if(sanctions){loadPersonnel();loadSanctions();}if(staff){loadPersonnel();loadRankConfig();}if(ranks){loadRankConfig();loadPersonnel();loadRankHistory();}}));$("discordLoginButton").addEventListener("click", () => {
+document.querySelectorAll(".workspace-tab").forEach(button=>button.addEventListener("click",()=>{const view=button.dataset.view,apps=view==="applications",rankReq=view==="rank-requests",preselection=view==="preselections",sanctions=view==="sanctions",staff=view==="personnel",ranks=view==="ranks";$("sanctionsView").classList.toggle("hidden",!sanctions);$("rankRequestsView").classList.toggle("hidden",!rankReq);$("preselectionsView").classList.toggle("hidden",!preselection);$("personnelView").classList.toggle("hidden",!staff);$("rankView").classList.toggle("hidden",!ranks);["applicationsIntro","applicationStats","applicationsToolbar","applicationStatusTabs"].forEach(id=>$(id).classList.toggle("hidden",!apps));$("candidateList").classList.toggle("hidden",!apps);document.querySelectorAll(".workspace-tab").forEach(b=>b.classList.toggle("active",b===button));$("workspaceTitle").textContent=button.dataset.title||button.textContent.trim();if(apps)loadApplications();if(rankReq)loadRankRequests();if(preselection)loadPreselections();if(sanctions){loadPersonnel();loadSanctions();}if(staff){loadPersonnel();loadRankConfig();}if(ranks){loadRankConfig();loadPersonnel();loadRankHistory();}}));$("discordLoginButton").addEventListener("click", () => {
   $("loginError").textContent = "";
   window.location.assign(API_BASE + "?panel=oauth-start");
 });$("refreshButton").addEventListener("click", loadApplications);
