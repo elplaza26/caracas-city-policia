@@ -1,3 +1,4 @@
+import { interceptChanges } from "./change-requests.ts";
 import { writeAudit } from "./audit-events.ts";
 import { withOperationLock } from "./operation-lock.ts";
 import { accessMember } from "./access-member.ts";
@@ -577,26 +578,34 @@ async function routePanel(req: Request): Promise<Response> {
       commands_registered: commandsRegistered,
       configured: { discord: Boolean(BOT_TOKEN), database: Boolean(SUPABASE_URL && SERVICE_KEY), discord_oauth: Boolean(DISCORD_OAUTH_CLIENT_SECRET) },
       warning: commandsRegistered ? undefined : "La API está activa, pero no se pudieron actualizar los comandos de Discord.",
-      version: "directiva-approval-optimized-2026-10-28h",
+      version: "all-changes-directiva-2026-10-28i",
     });
   }
   return json({ error: "Método no permitido." }, 405);
  } catch(error) { console.error("Panel request failed",String(error));return json({error:"No se pudo comprobar el acceso con Discord en este momento. Tu sesión no se ha cerrado. Reintenta en unos segundos."},503); }
 }
-Deno.serve(async(req:Request)=>{
+async function dispatchWithLocks(req:Request):Promise<Response>{
  const action=new URL(req.url).searchParams.get("panel")||"";
- const guarded=["rank-change","personnel-register","rank-request-review","rank-authorization-review","decision","transfer-decision","sanction","sanction-delete","nickname-sync","rank-config-save","rank-config-import-all"];
+ const guarded=["rank-change","personnel-register","rank-request-review","rank-authorization-review","decision","transfer-decision","sanction","sanction-delete","nickname-sync","personnel-delete","shift-close","rank-config-save","rank-config-import-all"];
  if(req.method!=="POST"||!guarded.includes(action))return routePanel(req);
  try{
   if(!await authenticate(req))return json({error:"La sesión caducó. Entra nuevamente con Discord."},401);
   const body=await req.clone().json();let target=String(body.discord_user_id||"");
-  const lookups:Record<string,[string,string]>={decision:["police_applications","discord_user_id"],"transfer-decision":["police_transfer_applications","discord_user_id"],"rank-request-review":["police_rank_requests","discord_user_id"],"rank-authorization-review":["police_rank_authorizations","target_id"],"sanction-delete":["police_sanctions","discord_user_id"]};
+  const lookups:Record<string,[string,string]>={decision:["police_applications","discord_user_id"],"transfer-decision":["police_transfer_applications","discord_user_id"],"rank-request-review":["police_rank_requests","discord_user_id"],"rank-authorization-review":["police_rank_authorizations","target_id"],"sanction-delete":["police_sanctions","discord_user_id"],"shift-close":["police_duty_shifts","discord_user_id"]};
   if(lookups[action]){const id=String(body.id||"");if(!/^[0-9a-f-]{36}$/i.test(id))return json({error:"Identificador inválido."},400);const [table,field]=lookups[action];const rows=await db(table+"?select="+field+"&id=eq."+encodeURIComponent(id)+"&limit=1");if(!rows?.length)return json({error:"No se encontró el registro."},404);target=String(rows[0][field]);}
   if(action.startsWith("rank-config-"))return withOperationLock("rank-scale",()=>routePanel(req));
   if(!/^\d{17,20}$/.test(target))return json({error:"Usuario inválido."},400);
   return withOperationLock("personnel:"+target,()=>routePanel(req));
  }catch(error){console.error("Guarded request:",String(error));return json({error:"No se pudo preparar la operación. Comprueba las migraciones y vuelve a consultar el registro."},503);}
-});
+}
+
+Deno.serve(async(req:Request)=>{try{
+ const action=new URL(req.url).searchParams.get('panel')||'',origin=req.headers.get('origin');
+ if(action!=='oauth-callback'&&origin&&origin!==PANEL_ORIGIN)return json({error:'Origen no autorizado.'},403);
+ if(req.method==='OPTIONS')return routePanel(req);
+ const intercepted=await interceptChanges(req,action,{db,authorizedUser,discord,dispatch:routePanel,json});
+ return intercepted||await dispatchWithLocks(req);
+}catch(error){console.error('Request dispatch:',String(error));return json({error:'No se pudo procesar la petición. Comprueba la conexión y actualiza el registro.'},503);}});
 const WARN_ROLE_IDS = ["1539970134482092032", "1539970134469378077", "1539970134469378076"];
 const STRIKE_ROLE_IDS = ["1539970134469378075", "1539970134469378074", "1539970134469378073"];
 const EXPELLED_ROLE_ID = "1539970134482092034";
@@ -614,12 +623,14 @@ const MANAGER_ROLE_LABELS = new Map([
   ["1539970134519578773", "UCOP · Asuntos Internos"],
   ["1539970134519578774", "Directiva"],
 ]);
+const authorizedRequests = new WeakMap<Request,string|null>();
 async function authorizedUser(req: Request): Promise<string | null> {
+  if(authorizedRequests.has(req))return authorizedRequests.get(req)!;
   const userId = await authenticate(req);
   if (!userId) return null;
   try {
     const member = await accessMember(userId,req.method!=="GET");
-    return (member.roles ?? []).some((role: string) => MANAGER_ROLE_IDS.has(role)) ? userId : null;
+    const result=(member.roles ?? []).some((role: string) => MANAGER_ROLE_IDS.has(role)) ? userId : null; authorizedRequests.set(req,result);return result;
   } catch (e) {
     console.error("Manager role verification failed:", String(e));
     if(String(e).includes("404"))return null;throw e;
