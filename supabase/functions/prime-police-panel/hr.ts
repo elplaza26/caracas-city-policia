@@ -179,7 +179,7 @@ async function rankConfig(req: Request) {
   const auth = await allowed(req); if (auth.error) return auth.error;
   try {
     const [configured, guildRoles] = await Promise.all([
-      db("police_rank_roles?select=role_id,role_name,rank_order&order=rank_order.asc"),
+      db("police_rank_roles?select=role_id,role_name,rank_order,minimum_days&order=rank_order.asc"),
       discord("/guilds/" + GUILD_ID + "/roles") as Promise<any[]>,
     ]);
     const roles = (guildRoles ?? []).map((r: any) => ({ id: String(r.id), name: String(r.name), position: Number(r.position), managed: Boolean(r.managed) }));
@@ -194,7 +194,7 @@ async function importAllRankRoles(req: Request) {
   const auth = await allowed(req); if (auth.error) return auth.error;
   try {
     const [existing, guildRoles] = await Promise.all([
-      db("police_rank_roles?select=role_id,role_name,rank_order&order=rank_order.asc"),
+      db("police_rank_roles?select=role_id,role_name,rank_order,minimum_days&order=rank_order.asc"),
       discord("/guilds/" + GUILD_ID + "/roles") as Promise<any[]>,
     ]);
     const eligible = (guildRoles ?? [])
@@ -232,13 +232,16 @@ async function saveRankConfig(req: Request) {
     const guildRoles = await discord("/guilds/" + GUILD_ID + "/roles") as any[];
     const byId = new Map((guildRoles ?? []).map((r: any) => [String(r.id), r]));
     for (const id of ids) { const role: any = byId.get(id); if (!isAssignableRankRole(role)) return json({ error: "La lista incluye un rol protegido, privilegiado o que no existe en el servidor." }, 400); }
-    const existing = await db("police_rank_roles?select=role_id,role_name,rank_order&order=rank_order.asc");
+    const existing = await db("police_rank_roles?select=role_id,role_name,rank_order,minimum_days&order=rank_order.asc");
+    const suppliedDays = body?.minimum_days_by_role && typeof body.minimum_days_by_role === "object" && !Array.isArray(body.minimum_days_by_role) ? body.minimum_days_by_role : {};
+    for (const value of Object.values(suppliedDays) as any[]) if (!Number.isInteger(Number(value)) || Number(value) < 0 || Number(value) > 3650) return json({ error: "Los días mínimos deben ser un número entero entre 0 y 3650." }, 400);
+    const existingDays = new Map((existing ?? []).map((row: any) => [String(row.role_id), Number(row.minimum_days ?? 0)]));
     const removed = (existing ?? []).filter((r: any) => !ids.includes(r.role_id));
     if (removed.length) {
       const inUse = await db("police_personnel?select=discord_user_id,rank_role_id&rank_role_id=in.(" + removed.map((r: any) => r.role_id).join(",") + ")&limit=1");
       if (inUse?.length) return json({ error: "No quites un rango que todavía tiene oficiales asignados. Cambia primero sus rangos." }, 409);
     }
-    const mapped = ids.map((id: string, index: number) => ({ role_id: id, role_name: String(byId.get(id).name), rank_order: index + 1, updated_at: new Date().toISOString() }));
+    const mapped = ids.map((id: string, index: number) => ({ role_id: id, role_name: String(byId.get(id).name), rank_order: index + 1, minimum_days: Number(Object.prototype.hasOwnProperty.call(suppliedDays, id) ? suppliedDays[id] : existingDays.get(id) ?? 0), updated_at: new Date().toISOString() }));
     try {
       await db("police_rank_roles", { method: "DELETE" });
       if (mapped.length) await db("police_rank_roles", { method: "POST", body: JSON.stringify(mapped) });
@@ -396,6 +399,9 @@ async function changeRank(req: Request) {
   const requestedName = String(body?.full_name ?? "").trim().slice(0, 100);
   const requestedOoc = String(body?.name_ooc ?? "").trim().slice(0, 100);
   const requestedPlate = String(body?.plate ?? "").trim().slice(0, 30);
+  const effectiveDateText = String(body?.effective_date ?? "").trim();
+  const effectiveDate = effectiveDateText ? new Date(effectiveDateText + "T00:00:00.000Z") : new Date();
+  if (effectiveDateText && (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveDateText) || !Number.isFinite(effectiveDate.getTime()) || effectiveDateText > new Date().toISOString().slice(0, 10))) return json({ error: "La fecha del movimiento no puede estar en el futuro." }, 400);
   if (!validDiscordId(targetId) || !validDiscordId(targetRoleId) || !["promotion", "demotion", "assignment"].includes(actionType) || reason.length < 3) return json({ error: "Revisa el oficial, el rango y el motivo (mínimo 3 caracteres)." }, 400);
   let oldRoles: string[] = [];
   let didChangeDiscord = false;
@@ -435,11 +441,12 @@ async function changeRank(req: Request) {
     didChangeDiscord = true;
     for (const roleId of oldRoles) await discord("/guilds/" + GUILD_ID + "/members/" + enc(targetId) + "/roles/" + roleId, { method: "DELETE" });
     const now = new Date().toISOString();
+    const effectiveAt = effectiveDate.toISOString();
     const updated = {
       discord_user_id: targetId, discord_username: username, full_name: fullName,
       plate: requestedPlate || priorProfile.plate || "", unit: "UCOP", name_ooc: requestedOoc || priorProfile.name_ooc || "", rank_name: String(targetRank.role_name), rank_role_id: targetRoleId,
       status: "active", source_application_id: priorProfile?.source_application_id ?? null,
-      created_at: priorProfile?.created_at ?? now, updated_at: now, last_rank_change_at: now,
+      created_at: priorProfile?.created_at ?? now, updated_at: now, last_rank_change_at: effectiveAt,
     };
     await db("police_personnel?on_conflict=discord_user_id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=representation" }, body: JSON.stringify(updated) });
     const previousRank = currentRank ?? (priorProfile?.rank_name ? { role_id: priorProfile.rank_role_id, role_name: priorProfile.rank_name } : null);
@@ -447,7 +454,7 @@ async function changeRank(req: Request) {
       discord_user_id: targetId, discord_username: username, full_name: fullName, action_type: actionType,
       previous_role_id: previousRank?.role_id ?? null, previous_rank_name: previousRank?.role_name ?? priorProfile?.rank_name ?? "",
       new_role_id: targetRoleId, new_rank_name: String(targetRank.role_name), reason,
-      changed_by_discord_id: auth.userId, changed_by_name: actorName, created_at: now,
+      changed_by_discord_id: auth.userId, changed_by_name: actorName, created_at: effectiveAt,
     }) });
     await postRankAuditLog(
       actionType === "promotion" ? "⬆️ Ascenso de rango" : actionType === "demotion" ? "⬇️ Descenso de rango" : "🏷️ Asignación de rango",
@@ -458,6 +465,7 @@ async function changeRank(req: Request) {
         { name: "Placa", value: requestedPlate || String(priorProfile.plate || "Sin placa") },
         { name: "Rango anterior", value: String(currentRank?.role_name || priorProfile.rank_name || "Sin rango") },
         { name: "Rango nuevo", value: String(targetRank.role_name) },
+        { name: "Fecha efectiva", value: effectiveAt.slice(0, 10) },
         { name: "Autorizó", value: actorName },
         { name: "Motivo", value: reason },
       ],
