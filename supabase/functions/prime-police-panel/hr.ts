@@ -19,6 +19,23 @@ const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const encoder = new TextEncoder();
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "https://primepolicerp.github.io", "Access-Control-Allow-Headers": "authorization, apikey, content-type", "Access-Control-Allow-Methods": "GET, POST, OPTIONS", Vary: "Origin", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer" } });
 
+function personnelNickname(name: string, plate: string) {
+  const cleanName = name.trim().replace(/\s+/g, " ");
+  const cleanPlate = plate.trim().replace(/\s+/g, " ");
+  if (!cleanPlate) return cleanName.slice(0, 32);
+  const suffix = " #" + cleanPlate;
+  if (suffix.length >= 32) return "#" + cleanPlate.slice(0, 31);
+  return cleanName.slice(0, 32 - suffix.length).trimEnd() + suffix;
+}
+
+async function updatePersonnelNickname(memberId: string, name: string, plate: string, reason: string) {
+  return await discord("/guilds/" + GUILD_ID + "/members/" + enc(memberId), {
+    method: "PATCH",
+    headers: { "X-Audit-Log-Reason": encodeURIComponent(reason) },
+    body: JSON.stringify({ nick: personnelNickname(name, plate) }),
+  });
+}
+
 async function db(path: string, init: RequestInit = {}) {
   if (!SUPABASE_URL || !SERVICE_KEY) throw new Error("Base de datos no configurada");
   const response = await fetch(SUPABASE_URL + "/rest/v1/" + path, {
@@ -160,7 +177,7 @@ async function registerPersonnel(req: Request) {
   const unit = "UCOP";
   const rankRoleId = String(body?.rank_role_id ?? "").trim();
   if (!validDiscordId(id) || !validDiscordId(rankRoleId) || !nameIc || !nameOoc || !plate || (body?.unit && String(body.unit).trim().toUpperCase() !== "UCOP")) return json({ error: "Completa placa, nombre IC, nombre OOC, Discord y rango para registrar personal UCOP." }, 400);
-  let member: any; let oldRoles: string[] = []; let addedTargetRole = false;
+  let member: any; let oldRoles: string[] = []; let addedTargetRole = false; let nicknameChanged = false;
   try {
     const [guildMember, profiles, configuredRanks] = await Promise.all([
       discord("/guilds/" + GUILD_ID + "/members/" + enc(id)),
@@ -179,18 +196,20 @@ async function registerPersonnel(req: Request) {
     if (existing.unit && existing.unit !== "UCOP") return json({ error: "Este perfil pertenece a otra unidad y no puede administrarse desde UCOP." }, 409);
     if (!memberRoles.includes(rankRoleId)) { await discord("/guilds/" + GUILD_ID + "/members/" + enc(id) + "/roles/" + rankRoleId, { method: "PUT", body: "{}" }); addedTargetRole = true; }
     for (const roleId of oldRoles) await discord("/guilds/" + GUILD_ID + "/members/" + enc(id) + "/roles/" + roleId, { method: "DELETE" });
+    await updatePersonnelNickname(id, nameIc, plate, "PRIME POLICE UCOP: sincronización de nombre IC y placa al asignar rango"); nicknameChanged = true;
     const username = String(member.user?.global_name || member.user?.username || id);
     const now = new Date().toISOString();
     const rows = await db("police_personnel?on_conflict=discord_user_id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=representation" }, body: JSON.stringify({ discord_user_id: id, discord_username: username, full_name: nameIc, name_ooc: nameOoc, plate, unit, rank_name: String(rank.role_name), rank_role_id: rankRoleId, source_application_id: existing.source_application_id ?? null, status: "active", updated_at: now, last_rank_change_at: now }) });
-    return json({ ok: true, personnel: rows?.[0] ?? null });
+    return json({ ok: true, personnel: rows?.[0] ?? null, message: "Rango y apodo de Discord sincronizados como " + personnelNickname(nameIc, plate) + "." });
   } catch (error) {
     console.error("Personnel register error:", String(error));
     try {
+      if (nicknameChanged) await discord("/guilds/" + GUILD_ID + "/members/" + enc(id), { method: "PATCH", body: JSON.stringify({ nick: member?.nick ?? null }) });
       if (addedTargetRole) await discord("/guilds/" + GUILD_ID + "/members/" + enc(id) + "/roles/" + rankRoleId, { method: "DELETE" });
       for (const roleId of oldRoles) await discord("/guilds/" + GUILD_ID + "/members/" + enc(id) + "/roles/" + roleId, { method: "PUT", body: "{}" });
     } catch (rollbackError) { console.error("Personnel registration rollback failed:", String(rollbackError)); }
     const message = String(error);
-    if (message.includes("Discord API 403") || message.includes("50013")) return json({ error: "Discord denegó el cambio de rango. Comprueba que el bot pueda administrar roles y que su rol esté por encima del rango." }, 502);
+    if (message.includes("Discord API 403") || message.includes("50013")) return json({ error: "Discord denegó el cambio. El bot necesita Administrar roles y Gestionar apodos, y su rol debe estar por encima del rango." }, 502);
     if (message.includes("Discord API 404") || message.includes("10007")) return json({ error: "No se encontró al usuario en el servidor." }, 404);
     return json({ error: "No se pudo registrar al agente. Comprueba los datos y permisos." }, 502);
   }
@@ -436,6 +455,7 @@ async function changeRank(req: Request) {
   let oldRoles: string[] = [];
   let didChangeDiscord = false;
   let addedTargetRole = false;
+  let nicknameChanged = false;
   let priorProfile: any = null;
   let target: any;
   let member: any;
@@ -470,6 +490,7 @@ async function changeRank(req: Request) {
     if (!memberRoles.includes(targetRoleId)) { await discord("/guilds/" + GUILD_ID + "/members/" + enc(targetId) + "/roles/" + targetRoleId, { method: "PUT", body: "{}" }); addedTargetRole = true; }
     didChangeDiscord = true;
     for (const roleId of oldRoles) await discord("/guilds/" + GUILD_ID + "/members/" + enc(targetId) + "/roles/" + roleId, { method: "DELETE" });
+    await updatePersonnelNickname(targetId, fullName, requestedPlate || String(priorProfile.plate || ""), "PRIME POLICE UCOP: sincronización de nombre IC y placa al cambiar rango"); nicknameChanged = true;
     const now = new Date().toISOString();
     const effectiveAt = effectiveDate.toISOString();
     const updated = {
@@ -500,11 +521,12 @@ async function changeRank(req: Request) {
         { name: "Motivo", value: reason },
       ],
     );
-    return json({ ok: true, message: (actionType === "promotion" ? "Ascenso" : actionType === "demotion" ? "Descenso" : "Rango asignado") + " aplicado a " + fullName + "." });
+    return json({ ok: true, message: (actionType === "promotion" ? "Ascenso" : actionType === "demotion" ? "Descenso" : "Rango asignado") + " aplicado. Apodo de Discord sincronizado como " + personnelNickname(fullName, requestedPlate || String(priorProfile.plate || "")) + "." });
   } catch (error) {
     console.error("Rank change failed:", String(error));
     if (didChangeDiscord && target) {
       try {
+        if (nicknameChanged) await discord("/guilds/" + GUILD_ID + "/members/" + enc(targetId), { method: "PATCH", body: JSON.stringify({ nick: member?.nick ?? null }) });
         if (addedTargetRole) await discord("/guilds/" + GUILD_ID + "/members/" + enc(targetId) + "/roles/" + targetRoleId, { method: "DELETE" });
         for (const roleId of oldRoles) await discord("/guilds/" + GUILD_ID + "/members/" + enc(targetId) + "/roles/" + roleId, { method: "PUT", body: "{}" });
         if (priorProfile) await db("police_personnel?discord_user_id=eq." + enc(targetId), { method: "PATCH", body: JSON.stringify(priorProfile) });
@@ -512,7 +534,7 @@ async function changeRank(req: Request) {
       } catch (rollbackError) { console.error("Rank change rollback failed:", String(rollbackError)); }
     }
     const message = String(error);
-    if (message.includes("Discord API 403") || message.includes("50013")) return json({ error: "Discord denegó el cambio. El bot necesita Administrar roles y su rol debe estar por encima del rango." }, 502);
+    if (message.includes("Discord API 403") || message.includes("50013")) return json({ error: "Discord denegó el cambio. El bot necesita Administrar roles y Gestionar apodos, y su rol debe estar por encima del rango." }, 502);
     if (message.includes("Discord API 404") || message.includes("10007")) return json({ error: "No se encontró al oficial en el servidor." }, 404);
     return json({ error: "No se pudo completar el cambio de rango; revisa los permisos del bot y la base de datos." }, 502);
   }
