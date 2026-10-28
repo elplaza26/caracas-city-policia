@@ -92,6 +92,22 @@ const explainRankConfigFailure = (error: unknown) => {
   if (message.includes("Database 400") || message.includes("minimum_days") || message.includes("police_rank_roles")) return "La base de datos no tiene la estructura de rangos actualizada. Aplica las migraciones pendientes de Supabase y vuelve a actualizar.";
   return "No se pudo consultar Discord o guardar la escala. Actualiza la función prime-police-panel y vuelve a intentarlo.";
 };
+const explainRankSaveFailure = (error: unknown) => {
+  const message = String(error);
+  if (message.includes("minimum_days") || message.includes("police_rank_roles")) {
+    return "La estructura de police_rank_roles no coincide con la función publicada. Revisa la migración de rangos en Supabase. Detalle: " + message.slice(0, 320);
+  }
+  if (message.includes("Database 400") || message.includes("Database 409")) {
+    return "Supabase rechazó la escala por una restricción o dato duplicado. Detalle: " + message.slice(0, 420);
+  }
+  if (message.includes("Database 401") || message.includes("Database 403")) {
+    return "La función no tiene permisos para modificar police_rank_roles en Supabase. Revisa la clave de servicio configurada.";
+  }
+  if (message.includes("Discord API 403")) {
+    return "Discord no permitió consultar los roles. Revisa que el bot siga en el servidor y pueda ver los roles.";
+  }
+  return "No se pudo guardar la escala de rangos. Detalle: " + message.slice(0, 320);
+};
 function isAssignableRankRole(role: any) {
   if (!role || role.managed || PROTECTED_ROLE_IDS.has(String(role.id))) return false;
   try { return (BigInt(String(role.permissions ?? "0")) & BLOCKED_ROLE_PERMISSION_FLAGS) === 0n; }
@@ -264,7 +280,7 @@ async function saveRankConfig(req: Request) {
       throw error;
     }
     return json({ ok: true, ranks: mapped });
-  } catch (error) { console.error("Rank configuration save error:", String(error)); return json({ error: "No se pudo guardar la escala de rangos." }, 500); }
+  } catch (error) { console.error("Rank configuration save error:", String(error)); return json({ error: explainRankSaveFailure(error) }, 500); }
 }async function rankHistory(req: Request) {
   const auth = await allowed(req); if (auth.error) return auth.error;
   try {
