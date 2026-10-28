@@ -161,18 +161,18 @@ async function handle(i:any){
  if(i.type===5&&i.data?.custom_id==="prime_rank_request_submit"){
   const a=values(i);
   EdgeRuntime.waitUntil((async()=>{try{await processRankRequest(i,userId,username,a);}catch(error){console.error("Could not process rank request:",String(error));try{await editInteractionReply(i,"No se pudo completar la solicitud de rango. Contacta con UCOP antes de volver a enviarla.");}catch(replyError){console.error("Could not update rank request interaction:",String(replyError));}}})());
-  return response(5,{data:{flags:64}});
+  return response(5,{flags:64});
  }
  if(i.type===5&&i.data?.custom_id==="prime_application_submit"){
   const a=values(i);const personal=a.character_info||"";
   if(!personal||!a.motivation||!a.detention_rights||!a.scene_resolution||!a.roleplay_response)return ephemeral("Completa todos los apartados antes de enviar.");
   EdgeRuntime.waitUntil((async()=>{try{await processApplicationSubmit(i,userId,username,a);}catch(error){console.error("Could not process application submit:",String(error));try{await editInteractionReply(i,"No se pudo completar el envío. Comprueba si quedó registrada en el panel y contacta con un administrador antes de volver a intentarlo.");}catch(replyError){console.error("Could not update application interaction:",String(replyError));}}})());
-  return response(5,{data:{flags:64}});
+  return response(5,{flags:64});
  }
  if(i.type===5&&i.data?.custom_id==="prime_transfer_submit"){
   const a=values(i);
   EdgeRuntime.waitUntil((async()=>{try{await processTransferSubmit(i,userId,username,a);}catch(error){const detail=String(error);console.error("Could not process transfer submit:",detail);const message=detail.includes("DB 400")||detail.includes("DB 404")?"El formulario está completo, pero no se guardó porque la base de datos de traslados necesita actualizarse. Contacta con UCOP; no vuelvas a enviarlo todavía.":"No se pudo guardar la solicitud. Contacta con UCOP antes de volver a enviarla.";try{await editInteractionReply(i,message);}catch(replyError){console.error("Could not update transfer interaction:",String(replyError));}}})());
-  return response(5,{data:{flags:64}});
+  return response(5,{flags:64});
  }
  return ephemeral("Interacción no compatible.");
 }
