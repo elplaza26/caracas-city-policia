@@ -88,7 +88,7 @@ async function processRankRequest(i:any,userId:string,username:string,a:any){
  if(!characterName||!plate||!approvedBy){await editInteractionReply(i,"Completa nombre IC, placa y nombre de quien aprobó la entrevista.");return;}
  const member=await discord("/guilds/"+GUILD_ID+"/members/"+encodeURIComponent(userId)) as any;
  const roles:string[]=member?.roles||[];
- if((!roles.includes(PRESELECTION_ROLE_ID)&&!roles.includes(POLICE_ROLE_ID))||roles.includes(CIC_ROLE_ID)||roles.includes(EXPELLED_ROLE_ID)){await editInteractionReply(i,"Solo las personas con rol Preselección o Policía pueden solicitar el ingreso tras su entrevista IC.");return;}
+ if((!roles.includes(PRESELECTION_ROLE_ID)&&!roles.includes(POLICE_ROLE_ID))||roles.includes(EXPELLED_ROLE_ID)){await editInteractionReply(i,"Solo las personas con rol Preselección o Policía pueden solicitar el ingreso tras su entrevista IC.");return;}
  const rankName=POLICE_ONLY_RANK_LABEL;
  const pending=await db("police_rank_requests?select=id&discord_user_id=eq."+encodeURIComponent(userId)+"&status=eq.pending&limit=1");
  if(pending?.length){await editInteractionReply(i,"Ya tienes una solicitud de ingreso pendiente de revisión por UCOP.");return;}
