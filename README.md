@@ -41,3 +41,11 @@ Los rangos se configuran dentro del panel: abre **Ascensos y descensos**, añade
 - `supabase/functions/prime-police-panel/hr.ts`: personal, solicitudes de rango, jerarquía e historial.
 - `supabase/functions/prime-police-discord/index.ts`: comandos e interacciones de Discord.
 - `supabase/migrations/`: esquema de postulaciones, preseleccionados, personal, rangos, solicitudes e historial.
+
+## Autorización de ascensos
+
+Directiva incluye Gobierno/Alta Directiva `1539970134565982313`, Directiva `1539970134544748562` y Directiva `1539970134519578774`. Puede aplicar ascensos directamente y revisar propuestas. Otros gestores conservan la gestión habitual; un ascenso requiere revisión de Directiva. Editar Personal aplica la misma regla. Una asignación inicial por encima del primer rango también requiere autorización. La escala de rangos la modifica Directiva.
+
+Las propuestas se revisan en Ascensos y descensos → Autorizaciones de Directiva. Una aprobación comprueba que el rango actual sigue siendo el de la propuesta y vuelve a validar los permisos del revisor. Las operaciones simultáneas para un agente se protegen mediante una reserva con caducidad. Si una propuesta queda en procesamiento tras un corte, revisar Discord y la ficha antes de cualquier reparación manual.
+
+La migración `20261028194311_police_rank_authorizations.sql` añade las autorizaciones, reservas, auditoría y el resumen de horas por período. El historial horario se consulta por fechas y páginas de 50 registros. Los permisos de gestión se verifican de nuevo en cada operación; las consultas comparten una caché de roles de 10 segundos.

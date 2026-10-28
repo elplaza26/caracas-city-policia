@@ -1,3 +1,5 @@
+import { writeAudit } from "./audit-events.ts";
+import { accessMember } from "./access-member.ts";
 const GUILD_ID = "1539970134469378068";
 const POLICE_ROLE_ID = "1539970134482092038";
 const PRESELECTION_ROLE_ID = "1564685481457877012";
@@ -9,6 +11,8 @@ const POLICE_ONLY_RANK_LABEL = "Solo rol de Policía (sin rango configurado)";
 function normalizeRankName(value: unknown) {
   return String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
 }
+const DIRECTOR_ROLE_IDS = new Set(["1539970134565982313","1539970134544748562","1539970134519578774"]);
+const requestMembers = new WeakMap<Request, any>();
 const MANAGER_ROLE_IDS = new Set(["1539970134565982313", "1539970134544748562", "1539970134544748556", "1539970134544748557", "1539970134519578773", "1539970134519578774"]);
 const PROTECTED_ROLE_IDS = new Set([
   POLICE_ROLE_ID, PRESELECTION_ROLE_ID, EXPELLED_ROLE_ID, CIC_ROLE_ID,
@@ -86,6 +90,7 @@ async function discord(path: string, init: RequestInit = {}) {
 }
 
 async function postRankAuditLog(title: string, color: number, fields: Array<{ name: string; value: string }>) {
+  await writeAudit(title,fields);
   try {
     await discord("/channels/" + RANK_AUDIT_CHANNEL_ID + "/messages", {
       method: "POST",
@@ -119,11 +124,11 @@ async function authorizedUser(req: Request): Promise<string | null> {
     userId = session.sub;
   } catch { return null; }
   try {
-    const member = await discord("/guilds/" + GUILD_ID + "/members/" + encodeURIComponent(userId)) as any;
+    const member = await accessMember(userId,req.method!=="GET"); requestMembers.set(req,member);
     return (member.roles ?? []).some((role: string) => MANAGER_ROLE_IDS.has(role)) ? userId : null;
   } catch (error) {
     console.error("HR permission check failed:", String(error));
-    return null;
+    if(String(error).includes("404"))return null; throw error;
   }
 }
 
@@ -159,7 +164,7 @@ function isAssignableRankRole(role: any) {
 async function allowed(req: Request) {
   const userId = await authorizedUser(req);
   if (!userId) return { error: json({ error: "No tienes permiso para gestionar el personal." }, 403) };
-  return { userId };
+  return { userId, director:(requestMembers.get(req)?.roles||[]).some((id:string)=>DIRECTOR_ROLE_IDS.has(id)) };
 }async function listPersonnel(req: Request) {
   const auth = await allowed(req); if (auth.error) return auth.error;
   try {
@@ -187,6 +192,7 @@ async function deletePersonnel(req: Request) {
   try {
     const removed = await db("police_personnel?discord_user_id=eq." + enc(id) + "&unit=in.(UCOP,CIC)", { method: "DELETE" });
     if (!Array.isArray(removed) || !removed.length) return json({ error: "Ese agente ya no aparece en el registro de personal." }, 404);
+    await postRankAuditLog("🗑️ Ficha eliminada",0xe87979,[{name:"Agente ID",value:id},{name:"Gestor",value:auth.userId!}]);
     return json({ ok: true, message: "Agente eliminado del registro de personal." });
   } catch (error) {
     console.error("Personnel deletion error:", String(error));
@@ -208,7 +214,7 @@ async function registerPersonnel(req: Request) {
     const [guildMember, profiles, configuredRanks] = await Promise.all([
       discord("/guilds/" + GUILD_ID + "/members/" + enc(id)),
       db("police_personnel?select=discord_user_id,rank_name,rank_role_id,unit,source_application_id,created_at,last_rank_change_at&discord_user_id=eq." + enc(id) + "&limit=1"),
-      db("police_rank_roles?select=role_id,role_name&order=rank_order.asc"),
+      db("police_rank_roles?select=role_id,role_name,rank_order&order=rank_order.asc"),
     ]);
     member = guildMember as any;
     const rank = (configuredRanks ?? []).find((item: any) => item.role_id === rankRoleId);
@@ -220,6 +226,11 @@ async function registerPersonnel(req: Request) {
     oldRoles = (configuredRanks ?? []).filter((item: any) => memberRoles.includes(String(item.role_id)) && item.role_id !== rankRoleId).map((item: any) => String(item.role_id));
     const existing = profiles?.[0] ?? {};
     if (existing.unit && !BRANCH_ROLES[existing.unit]) return json({ error: "Este perfil pertenece a otra unidad y no puede administrarse desde UCOP." }, 409);
+    const currentRank=(configuredRanks??[]).filter((r:any)=>memberRoles.includes(r.role_id)).sort((a:any,b:any)=>Number(b.rank_order)-Number(a.rank_order))[0];
+    const firstRank=(configuredRanks??[])[0];
+    if(!auth.director && ((!currentRank&&rankRoleId!==firstRank?.role_id)||(currentRank&&Number(rank.rank_order)>Number(currentRank.rank_order)))) {
+      return await queueRankAuthorization(auth.userId!,id,nameIc,currentRank?.role_id||null,rank,"register",body);
+    }
     if (!memberRoles.includes(rankRoleId)) { await discord("/guilds/" + GUILD_ID + "/members/" + enc(id) + "/roles/" + rankRoleId, { method: "PUT", body: "{}" }); addedTargetRole = true; }
     for (const roleId of oldRoles) await discord("/guilds/" + GUILD_ID + "/members/" + enc(id) + "/roles/" + roleId, { method: "DELETE" });
     restoreBranch = await syncPersonnelBranch(id, unit, memberRoles);
@@ -227,6 +238,7 @@ async function registerPersonnel(req: Request) {
     const username = String(member.user?.global_name || member.user?.username || id);
     const now = new Date().toISOString();
     const rows = await db("police_personnel?on_conflict=discord_user_id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=representation" }, body: JSON.stringify({ discord_user_id: id, discord_username: username, full_name: nameIc, name_ooc: nameOoc, plate, unit, rank_name: String(rank.role_name), rank_role_id: rankRoleId, source_application_id: existing.source_application_id ?? null, status: "active", updated_at: now, last_rank_change_at: existing.rank_role_id === rankRoleId ? (existing.last_rank_change_at || now) : now }) });
+    await postRankAuditLog("🗂️ Ficha policial actualizada",0x6499ff,[{name:"Agente",value:nameIc},{name:"Placa",value:plate},{name:"Rama",value:unit},{name:"Rango",value:String(rank.role_name)},{name:"Gestor",value:auth.userId!}]);
     return json({ ok: true, personnel: rows?.[0] ?? null, message: "Rango y apodo de Discord sincronizados como " + personnelNickname(nameIc, plate) + "." });
   } catch (error) {
     console.error("Personnel register error:", String(error));
@@ -254,7 +266,7 @@ async function rankConfig(req: Request) {
     const available = roles.filter((r: any) => r.id !== GUILD_ID && isAssignableRankRole(r)).sort((a: any, b: any) => a.position - b.position || a.name.localeCompare(b.name, "es"));
     if (!(configured ?? []).length && !available.length) return json({ error: "Discord respondió, pero no hay roles asignables. Comprueba los permisos del bot y vuelve a desplegar prime-police-panel." }, 409);
     const configuredIds = new Set((configured ?? []).map((rank: any) => String(rank.role_id)));
-    if (available.some((role: any) => !configuredIds.has(role.id))) {
+    if (auth.director && available.some((role: any) => !configuredIds.has(role.id))) {
       const synced = await importAllRankRoles(req);
       const result = await synced.json().catch(() => ({}));
       if (!synced.ok) return json(result, synced.status);
@@ -268,6 +280,7 @@ async function rankConfig(req: Request) {
 
 async function importAllRankRoles(req: Request) {
   const auth = await allowed(req); if (auth.error) return auth.error;
+  if(!auth.director)return json({error:"Solo Directiva puede modificar la escala de rangos."},403);
   try {
     const [existing, guildRoles] = await Promise.all([
       db("police_rank_roles?select=role_id,role_name,rank_order,minimum_days&order=rank_order.asc"),
@@ -302,6 +315,7 @@ async function importAllRankRoles(req: Request) {
 
 async function saveRankConfig(req: Request) {
   const auth = await allowed(req); if (auth.error) return auth.error;
+  if(!auth.director)return json({error:"Solo Directiva puede modificar la escala de rangos."},403);
   let body: any; try { body = await req.json(); } catch { return json({ error: "Solicitud inválida." }, 400); }
   const ids = body?.role_ids;
   if (!Array.isArray(ids) || ids.length > 250 || ids.some((x: unknown) => typeof x !== "string" || !validDiscordId(x)) || new Set(ids).size !== ids.length) return json({ error: "La escala debe incluir hasta 250 roles únicos." }, 400);
@@ -438,6 +452,46 @@ async function reviewRankRequest(req: Request) {
   }
 }
 
+async function queueRankAuthorization(actor:string,target:string,name:string,previous:string|null,rank:any,operation:string,payload:any){
+ try{
+  const rows=await db("police_rank_authorizations",{method:"POST",body:JSON.stringify({target_id:target,requested_by:actor,full_name:name,previous_role_id:previous,new_role_id:rank.role_id,new_rank_name:rank.role_name,operation,payload})});
+  await postRankAuditLog("⏳ Ascenso pendiente de autorización",0xe9c778,[{name:"Agente",value:name},{name:"Propuesto por",value:actor},{name:"Destino",value:String(rank.role_name)}]);
+  return json({ok:true,pending_authorization:true,authorization_id:rows?.[0]?.id,message:"Solicitud enviada a Directiva. El rango de Discord no se ha cambiado."});
+ }catch(error){if(String(error).includes("409"))return json({error:"El agente ya tiene un cambio de rango pendiente de Directiva."},409);console.error("Queue promotion:",String(error));return json({error:"No se pudo guardar la autorización. Comprueba la migración de autorizaciones."},502);}
+}
+
+async function reviewRankAuthorization(req:Request){
+ const auth=await allowed(req);if(auth.error)return auth.error;
+ if(!auth.director)return json({error:"Solo Directiva puede autorizar o rechazar ascensos."},403);
+ let body:any;try{body=await req.json();}catch{return json({error:"Solicitud inválida."},400);}
+ const id=String(body?.id||""),decision=String(body?.decision||""),reason=String(body?.reason||"").trim().slice(0,500);
+ if(!/^[0-9a-f-]{36}$/i.test(id)||!["approve","reject"].includes(decision))return json({error:"Revisa la solicitud y la decisión."},400);
+ let claimed=false,applied=false;
+ try{
+  const rows=await db("police_rank_authorizations?id=eq."+enc(id)+"&status=eq.pending",{method:"PATCH",body:JSON.stringify({status:decision==="approve"?"processing":"rejected",reviewed_by:auth.userId,reviewed_at:new Date().toISOString(),review_reason:reason||null})});
+  if(!rows?.length)return json({error:"Esta solicitud ya está revisada o la está procesando otro gestor."},409);
+  claimed=true;const proposal=rows[0];
+  if(decision==="reject"){
+   await postRankAuditLog("❌ Ascenso rechazado por Directiva",0xe87979,[{name:"Agente",value:proposal.full_name},{name:"Directiva",value:auth.userId!},{name:"Motivo",value:reason||"Sin observaciones"}]);
+   return json({ok:true,message:"Ascenso rechazado; no se modificó ningún rol."});
+  }
+  const [member,ranks]=await Promise.all([discord("/guilds/"+GUILD_ID+"/members/"+enc(proposal.target_id)) as Promise<any>,db("police_rank_roles?select=role_id,rank_order&order=rank_order.desc")]);
+  const current=(ranks||[]).find((r:any)=>(member.roles||[]).includes(r.role_id));
+  if((current?.role_id||null)!==(proposal.previous_role_id||null))throw Error("El rango del agente cambió después de la solicitud. Envía una propuesta nueva.");
+  const internal=new Request("https://internal/",{method:"POST",headers:{authorization:req.headers.get("authorization")||"","content-type":"application/json"},body:JSON.stringify(proposal.payload)});
+  const response=proposal.operation==="register"?await registerPersonnel(internal):await changeRank(internal);
+  const result=await response.json();if(!response.ok||result.pending_authorization)throw Error(result.error||"No se pudo aplicar el rango autorizado.");
+  applied=true;
+  await db("police_rank_authorizations?id=eq."+enc(id)+"&status=eq.processing",{method:"PATCH",body:JSON.stringify({status:"approved",review_reason:reason||"Autorizado por Directiva"})});
+  await postRankAuditLog("✅ Ascenso autorizado por Directiva",0x45b879,[{name:"Agente",value:proposal.full_name},{name:"Rango",value:proposal.new_rank_name},{name:"Propuesto por",value:proposal.requested_by},{name:"Autorizado por",value:auth.userId!}]);
+  return json({ok:true,message:result.message||"Ascenso autorizado y aplicado."});
+ }catch(error){console.error("Review authorization:",String(error));
+  if(applied)return json({ok:true,warning:"El rango fue aplicado, pero falta cerrar el registro de autorización. No repitas el ascenso.",message:"Cambio aplicado en Discord."});
+  if(claimed)try{await db("police_rank_authorizations?id=eq."+enc(id)+"&status=eq.processing",{method:"PATCH",body:JSON.stringify({status:"failed",review_reason:String(error).slice(0,500)})});}catch{/* leave processing to avoid a duplicate approval */}
+  return json({error:claimed?String(error).replace(/^Error: /,""):"No se pudo abrir la solicitud de autorización."},409);
+ }
+}
+
 async function changeRank(req: Request) {
   const auth = await allowed(req); if (auth.error) return auth.error;
   let body: any; try { body = await req.json(); } catch { return json({ error: "Solicitud inválida." }, 400); }
@@ -483,6 +537,9 @@ async function changeRank(req: Request) {
     if (currentRank && actionType === "assignment") return json({ error: "El oficial ya tiene un rango; elige Ascenso o Descenso." }, 409);
     if (currentRank && actionType === "promotion" && Number(targetRank.rank_order) <= Number(currentRank.rank_order)) return json({ error: "Para ascender, el nuevo rango debe estar por encima del actual en la escala." }, 409);
     if (currentRank && actionType === "demotion" && Number(targetRank.rank_order) >= Number(currentRank.rank_order)) return json({ error: "Para descender, el nuevo rango debe estar por debajo del actual en la escala." }, 409);
+    if(!auth.director && (actionType==="promotion" || (!currentRank&&targetRoleId!==(ranks??[])[0]?.role_id))) {
+      return await queueRankAuthorization(auth.userId!,targetId,String(priorProfile.full_name),currentRank?.role_id||null,targetRank,"change",body);
+    }
     oldRoles = currentRanks.map((r: any) => String(r.role_id)).filter((roleId: string) => roleId !== targetRoleId);
     const username = String(member.user?.global_name || member.user?.username || targetId);
     const fullName = requestedName || String(priorProfile?.full_name || username);
@@ -544,6 +601,21 @@ async function changeRank(req: Request) {
 }
 
 export async function handleHr(req: Request, action: string): Promise<Response | null> {
+  if(action==="audit-events"&&req.method==="GET"){
+   const auth=await allowed(req);if(auth.error)return auth.error;
+   try{return json({ok:true,events:await db("police_audit_events?select=*&order=created_at.desc&limit=30")});}catch{return json({error:"No se pudo cargar el historial administrativo."},502);}
+  }
+  if(action==="duty-summary"&&req.method==="GET"){
+   const auth=await allowed(req);if(auth.error)return auth.error;
+   const params=new URL(req.url).searchParams,from=new Date(params.get("from")||Date.now()-7*86400000),to=new Date(params.get("to")||Date.now());
+   if(!Number.isFinite(from.getTime())||!Number.isFinite(to.getTime())||from>=to)return json({error:"Rango de fechas inválido."},400);
+   try{return json({ok:true,summary:await db("rpc/police_duty_summary",{method:"POST",body:JSON.stringify({p_from:from.toISOString(),p_to:to.toISOString()})})});}catch(error){console.error("Duty summary:",String(error));return json({error:"No se pudo calcular el resumen. Comprueba la migración de autorizaciones y actividad."},502);}
+  }
+  if(action==="rank-authorizations"&&req.method==="GET"){
+   const auth=await allowed(req);if(auth.error)return auth.error;
+   try{return json({ok:true,can_authorize:auth.director,authorizations:await db("police_rank_authorizations?select=id,target_id,requested_by,full_name,previous_role_id,new_role_id,new_rank_name,status,requested_at,reviewed_at,reviewed_by,review_reason&order=requested_at.desc&limit=500")});}catch(error){console.error("List authorizations:",String(error));return json({error:"No se pudieron cargar las autorizaciones. Aplica la migración pendiente."},502);}
+  }
+  if(action==="rank-authorization-review"&&req.method==="POST")return await reviewRankAuthorization(req);
   if (action === "nickname-sync" && req.method === "POST") {
     const auth=await allowed(req);if(auth.error)return auth.error;
     let body:any;try{body=await req.json();}catch{return json({error:"Solicitud inválida."},400);}
@@ -566,7 +638,13 @@ export async function handleHr(req: Request, action: string): Promise<Response |
   }
   if (action === "shifts" && req.method === "GET") {
     const auth = await allowed(req); if (auth.error) return auth.error;
-    try { const offset=Number(new URL(req.url).searchParams.get("offset")||0); if(!Number.isSafeInteger(offset)||offset<0)return json({error:"Página inválida."},400); const shifts=await db("police_duty_shifts?select=*&order=started_at.desc,id.desc&limit=1000&offset="+offset); return json({ ok: true, shifts, next_offset:shifts.length===1000?offset+1000:null }); }
+    try { const params=new URL(req.url).searchParams,offset=Number(params.get("offset")||0);if(!Number.isSafeInteger(offset)||offset<0)return json({error:"Página inválida."},400);
+      const from=new Date(params.get("from")||Date.now()-7*86400000),to=new Date(params.get("to")||Date.now());if(!Number.isFinite(from.getTime())||!Number.isFinite(to.getTime())||from>=to)return json({error:"Rango de fechas inválido."},400);
+      let filter="&started_at=lt."+enc(to.toISOString())+"&or=(ended_at.is.null,ended_at.gte."+enc(from.toISOString())+")";
+      if(params.get("state")==="open")filter+="&ended_at=is.null";if(params.get("state")==="history")filter+="&ended_at=not.is.null";
+      const unit=params.get("unit");if(unit&&["UCOP","CIC"].includes(unit))filter+="&unit=eq."+unit;
+      const search=(params.get("search")||"").trim().replace(/[^\p{L}\p{N}\s]/gu,"").slice(0,100);if(search)filter+="&and=(or(full_name.ilike.*"+enc(search)+"*,plate.ilike.*"+enc(search)+"*))";
+      const shifts=await db("police_duty_shifts?select=*&order=started_at.desc,id.desc&limit=51&offset="+offset+filter);return json({ok:true,shifts:shifts.slice(0,50),next_offset:shifts.length>50?offset+50:null}); }
     catch (error) { console.error("Shifts read:",String(error)); return json({ error: "No se pudieron cargar las bitácoras. Comprueba la migración de turnos." },502); }
   }
   if (action === "shift-close" && req.method === "POST") {
