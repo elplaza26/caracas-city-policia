@@ -51,7 +51,7 @@ async function request(action, options) {
   });
   const result = await response.json().catch(() => ({}));
   if (!response.ok) {
-    if (response.status === 401 && action !== "login") showLogin();
+    if (action !== "login" && (response.status === 401 || (response.status === 403 && /sesión|permiso|autorizado/i.test(result.error||"")))) showLogin();
     throw new Error(result.error || ("Error HTTP " + response.status));
   }
   return result;
@@ -290,7 +290,7 @@ async function reviewRankRequest(item,decision,button) {
   if(!confirm("¿Confirmas "+verb+" a "+item.character_name+" ("+item.plate+")"+(policeOnly?" con solo el rol Policía":" con el rango "+item.requested_rank_name)+"? UCOP debe comprobar la entrevista IC y el nombre indicado en «Aprobado por»."))return;
   const reason=decision==="reject"?(prompt("Observación del rechazo (opcional):","")||""):"";
   button.disabled=true;button.textContent="Procesando…";
-  try{const result=await request("rank-request-review",{method:"POST",body:{id:item.id,decision,reason}});showToast(result.message||"Solicitud revisada.");await Promise.all([loadRankRequests(),loadPersonnel(),loadPreselections()]);}
+  try{const result=await request("rank-request-review",{method:"POST",body:{id:item.id,decision,reason}});showToast((result.message||"Solicitud revisada.")+(result.warning||""));await Promise.all([loadRankRequests(),loadPersonnel(),loadPreselections()]);}
   catch(error){showToast(error.message);button.disabled=false;button.textContent=decision==="accept"?(policeOnly?"Aprobar y asignar Policía":"Aprobar Policía + rango"):"Rechazar";}
 }
 async function decide(app, action, button) {

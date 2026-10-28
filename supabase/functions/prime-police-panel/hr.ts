@@ -364,6 +364,7 @@ async function reviewRankRequest(req: Request) {
     const reviewer = await discord("/guilds/" + GUILD_ID + "/members/" + enc(auth.userId)) as any;
     const reviewerName = String(reviewer.nick || reviewer.user?.global_name || reviewer.user?.username || auth.userId);
 
+    let nicknameWarning = "";
     if (decision === "accept") {
       const targetId = String(rankRequest.discord_user_id);
       const profiles = await db("police_personnel?select=*&discord_user_id=eq." + enc(targetId) + "&limit=1");
@@ -376,7 +377,8 @@ async function reviewRankRequest(req: Request) {
       let nicknameChanged = false;
       try {
         if (addedPoliceRole) await discord("/guilds/" + GUILD_ID + "/members/" + enc(targetId) + "/roles/" + POLICE_ROLE_ID, { method: "PUT", body: "{}" });
-        await updatePersonnelNickname(targetId, String(rankRequest.character_name), String(rankRequest.plate), "PRIME POLICE: ingreso aprobado tras entrevista IC"); nicknameChanged = true;
+        try { await updatePersonnelNickname(targetId, String(rankRequest.character_name), String(rankRequest.plate), "PRIME POLICE: ingreso aprobado tras entrevista IC"); nicknameChanged = true; }
+        catch (error) { if (!String(error).includes("Discord API 403")) throw error; nicknameWarning = " Discord no permitió cambiar el apodo de este usuario; debe ajustarlo manualmente o revisar la jerarquía del bot."; console.warn("Intake nickname forbidden", targetId); }
         await db("police_personnel?on_conflict=discord_user_id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=representation" }, body: JSON.stringify({ discord_user_id: targetId, discord_username: rankRequest.discord_username, full_name: rankRequest.character_name, name_ooc: profile?.name_ooc || rankRequest.discord_username, steam_username: rankRequest.steam_username || profile?.steam_username || "", plate: rankRequest.plate, unit: profile?.unit || (memberRoles.includes(CIC_ROLE_ID) ? "CIC" : "UCOP"), rank_name: profile?.rank_name || "Pendiente de asignación", rank_role_id: profile?.rank_role_id || null, status: "active", updated_at: new Date().toISOString() }) });
       } catch (error) {
         try {
@@ -425,10 +427,14 @@ async function reviewRankRequest(req: Request) {
       ],
     );
     const policeOnlyRequest = decision === "accept" && rankRequest.requested_rank_name === POLICE_ONLY_RANK_LABEL;
-    return json({ ok: true, message: decision !== "accept" ? "Solicitud rechazada." : policeOnlyRequest ? "Ingreso aprobado; rol Policía y apodo sincronizados. Asigna rama y rango desde Personal." : "Solicitud aprobada; rol de Policía y rango asignados." });
+    return json({ ok: true, warning: nicknameWarning || undefined, message: decision !== "accept" ? "Solicitud rechazada." : policeOnlyRequest ? "Ingreso aprobado; rol Policía asignado. Asigna rama y rango desde Personal." : "Solicitud aprobada; rol de Policía y rango asignados." });
   } catch (error) {
     console.error("Rank request review error:", String(error));
-    return json({ error: "No se pudo revisar la solicitud de rango." }, 500);
+    const message=String(error);
+    if(message.includes("Discord API 403"))return json({error:"Discord no permite asignar Policía. Comprueba Administrar roles y coloca el rol del bot por encima de Policía."},502);
+    if(message.includes("Discord API 404"))return json({error:"No se encontró al agente o revisor en el servidor de Discord."},404);
+    if(message.includes("steam_username")||message.includes("PGRST204"))return json({error:"Falta actualizar la base de datos del ingreso (campo Steam). Ejecuta supabase db push --linked antes de desplegar las funciones."},502);
+    return json({ error: "No se pudo guardar la aprobación. Comprueba las migraciones de personal y preselecciones en Supabase." }, 502);
   }
 }
 
