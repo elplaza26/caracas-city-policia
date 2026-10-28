@@ -152,7 +152,7 @@ async function handle(i:any){
  }
  if(i.type===3){
   if(["prime_duty_start","prime_duty_end"].includes(i.data?.custom_id)){
-   EdgeRuntime.waitUntil((async()=>{try{
+   EdgeRuntime.waitUntil((async()=>{await new Promise(resolve=>setTimeout(resolve,25));try{
     const member=await discord("/guilds/"+GUILD_ID+"/members/"+encodeURIComponent(userId)) as any;
     if(!(member.roles||[]).includes(POLICE_ROLE_ID)||(member.roles||[]).includes(EXPELLED_ROLE_ID)){await editInteractionReply(i,"Debes tener el rol Policía para registrar servicio.");return;}
     if(i.data.custom_id==="prime_duty_start"){
@@ -167,7 +167,7 @@ async function handle(i:any){
      const minutes=Math.max(0,Math.floor((now.getTime()-new Date(rows[0].started_at).getTime())/60000));await editInteractionReply(i,"🔴 Salida registrada. Tiempo de servicio: "+Math.floor(minutes/60)+" h "+minutes%60+" min.");
     }
    }catch(error){console.error("Duty interaction:",String(error));await editInteractionReply(i,"No se pudo registrar el servicio. Contacta con RR. HH. y comprueba tu bitácora antes de repetir.");}})());
-   return response(5,{flags:64});
+   return ephemeral("⏳ Registrando tu servicio… Esta confirmación es privada.");
   }
   if(i.data?.custom_id==="prime_apply")return modal();
   if(i.data?.custom_id==="prime_transfer")return transferModal();
@@ -194,9 +194,10 @@ async function handle(i:any){
 }
 Deno.serve(async(req:Request)=>{
  if(req.method==="OPTIONS")return new Response(null,{status:204,headers:CORS});
- if(req.method==="GET")return json({ok:true,service:"PRIME POLICE Discord applications",release:"private-modal-deferral-fix-2026-10-28f",configured:{discord:Boolean(BOT_TOKEN),database:Boolean(SUPABASE_URL&&SERVICE_KEY),public_key:Boolean(DISCORD_PUBLIC_KEY)},application_id:APPLICATION_ID,guild_id:GUILD_ID,commands:["publicar_postulaciones","postulacion","traslado"],message:DISCORD_PUBLIC_KEY?"Endpoint disponible.":"Falta configurar DISCORD_PUBLIC_KEY en los secretos de Supabase."});
+ if(req.method==="GET")return json({ok:true,service:"PRIME POLICE Discord applications",release:"duty-immediate-private-ack-2026-10-28g",duty_service:true,configured:{discord:Boolean(BOT_TOKEN),database:Boolean(SUPABASE_URL&&SERVICE_KEY),public_key:Boolean(DISCORD_PUBLIC_KEY)},application_id:APPLICATION_ID,guild_id:GUILD_ID,commands:["publicar_postulaciones","postulacion","traslado"],message:DISCORD_PUBLIC_KEY?"Endpoint disponible.":"Falta configurar DISCORD_PUBLIC_KEY en los secretos de Supabase."});
  if(req.method!=="POST")return json({error:"Method not allowed"},405);
  const body=await req.text();if(!await validSignature(req,body))return json({error:"Invalid Discord signature or DISCORD_PUBLIC_KEY not configured"},401);
  let i:any;try{i=JSON.parse(body)}catch{return json({error:"Invalid JSON"},400)}
+ console.info("Discord interaction",JSON.stringify({type:i.type,custom_id:i.data?.custom_id||i.data?.name||"",received_at:new Date().toISOString()}));
  try{return await handle(i)}catch(e){console.error("PRIME POLICE interaction:",String(e));if(i.type===2||i.type===3||i.type===5)return ephemeral("No se pudo completar la operación. Contacta con un administrador.");return json({error:"Internal error"},500)}
 });
