@@ -5,7 +5,6 @@ const PRESELECTION_ROLE_ID = "1564685481457877012";
 const POLICE_ROLE_ID = "1539970134482092038";
 const CIC_ROLE_ID = "1539970134519578772";
 const EXPELLED_ROLE_ID = "1539970134482092034";
-const APPLICATION_CHANNEL_ID = "1539970136683847857";
 const APPLICATION_ANNOUNCEMENTS_CHANNEL_ID = "1539970135375478860";
 const RANK_REQUEST_CHANNEL_ID = "1539970135375478859";
 const POLICE_ONLY_RANK_LABEL = "Solo rol de Policía (sin rango configurado)";
@@ -41,13 +40,10 @@ async function publishOrUpdatePanel(channelId:string,customId:string,payload:any
 }
 async function processApplicationSubmit(i:any,userId:string,username:string,a:any){
  const personal=a.character_info||"";const characterName=(personal.split(/\r?\n|\|/)[0].replace(/^Nombre IC:\s*/i,"").trim()||personal).slice(0,100);
- const answer={character_info:personal,motivation:a.motivation,detention_rights:a.detention_rights,scene_resolution:a.scene_resolution,roleplay_response:a.roleplay_response};
+ const ageIc=personal.match(/edad\s*IC\s*:\s*(\d{1,3})/i);const ageOoc=personal.match(/edad\s*OOC\s*:\s*(\d{1,3})/i);
+ const answer={character_info:personal,age_ic:ageIc?Number(ageIc[1]):null,age_ooc:ageOoc?Number(ageOoc[1]):null,motivation:a.motivation,detention_rights:a.detention_rights,scene_resolution:a.scene_resolution,roleplay_response:a.roleplay_response};
  const submitted=await db("rpc/submit_police_application",{method:"POST",body:JSON.stringify({p_discord_user_id:userId,p_discord_username:username,p_full_name:characterName,p_previous_experience:a.motivation,p_motivation:a.motivation,p_answers:answer})});
  if(!submitted?.ok){await editInteractionReply(i,String(submitted?.message||"No se pudo aceptar la postulación."));return;}
- const app=submitted.application;
- const embed={title:"📋 Nueva postulación · PRIME POLICE",description:"**Solicitante:** <@"+userId+">\n**Intento:** "+submitted.attempt_number+" de 3",fields:[{name:"Nombre y edad (IC)",value:personal.slice(0,1000)},{name:"Motivación y mejora personal",value:a.motivation.slice(0,1000)},{name:"Responsabilidad y órdenes",value:a.detention_rights.slice(0,1000)},{name:"Mala praxis o corrupción",value:a.scene_resolution.slice(0,1000)},{name:"Situaciones policiales",value:a.roleplay_response.slice(0,1000)}],color:14264415,footer:{text:"ID: "+String(app.id)+" · Intento "+submitted.attempt_number+"/3 · Revisar desde el panel web"}};
- try{const posted=await discord("/channels/"+APPLICATION_CHANNEL_ID+"/messages",{method:"POST",body:JSON.stringify({embeds:[embed]})}) as any;if(posted?.id)await db("police_applications?id=eq."+encodeURIComponent(String(app.id)),{method:"PATCH",body:JSON.stringify({discord_message_id:String(posted.id)})});}
- catch(error){console.error("Could not publish application intake message:",String(error));await editInteractionReply(i,"Tu postulación quedó guardada, pero no se pudo publicar el aviso en el canal. Contacta con un administrador para confirmar su recepción.");return;}
  await editInteractionReply(i,"¡Postulación recibida! Este es tu intento "+submitted.attempt_number+" de 3. El equipo de PRIME POLICE la revisará y comunicará el resultado en el canal correspondiente.");
 }
 async function processRankRequest(i:any,userId:string,username:string,a:any){
@@ -81,20 +77,12 @@ function rankRequestModal(){return response(9,{custom_id:"prime_rank_request_sub
  {type:18,label:"Rango solicitado (opcional por ahora)",description:"Si aún no hay rangos configurados, se solicitará solo el rol Policía.",component:modalInput("requested_rank","Se ignorará mientras no haya rangos configurados.",false,1)},
  {type:18,label:"Aprobado por (sin @)",description:"Indica el nombre de quien aprobó tu entrevista IC.",component:modalInput("approved_by","Escribe el nombre, sin mencionar a nadie.",true,1)}
 ]})}
-function applicationQuestions(){return [
- "1. **Nombre y edad (IC)**\n   Indica el nombre de tu personaje y su edad dentro del servidor.",
- "2. **Motivación y mejora personal**\n   ¿Por qué quieres formar parte de la Policía? ¿Cuáles son tus virtudes y qué aspectos mejorarías?",
- "3. **Responsabilidad y órdenes**\n   ¿Qué significa para ti pertenecer a la Policía? ¿Cómo actuarías ante una orden de un superior que consideras incorrecta o contraria a los protocolos?",
- "4. **Mala praxis o corrupción**\n   Si descubres que un compañero ha cometido una falta grave o ha aceptado un soborno, ¿qué harías y a quién lo comunicarías?",
- "5. **Situaciones policiales**\n   - **Caso 1:** Estás solo ante varios vehículos sospechosos. ¿Cómo pides apoyo?\n   - **Caso 2:** Una persona está agresiva, desobedece y tiene un bate. ¿Cómo actuarías?"
-].join("\n\n")}
-function applicationInstructionsPayload(){return {embeds:[{title:"Preguntas de postulación · PRIME POLICE",description:applicationQuestions(),color:14264415,footer:{text:"Lee las preguntas y pulsa Continuar para responderlas."}}],components:[{type:1,components:[{type:2,style:1,label:"Continuar · Responder preguntas",custom_id:"prime_application_form"}]}]}}
 function modal(){return response(9,{custom_id:"prime_application_submit",title:"Postulación · PRIME POLICE",components:[
- {type:18,label:"Nombre y edad (IC)",description:"Indica el nombre de tu personaje y su edad dentro del servidor.",component:modalInput("character_info","Escribe tu respuesta.")},
+ {type:18,label:"Nombre IC, edad IC y edad OOC",description:"Nombre IC, edad IC y tu edad OOC. Formato: Nombre IC: ... | Edad IC: ... | Edad OOC: ...",component:modalInput("character_info","Nombre IC: ... | Edad IC: ... | Edad OOC: ...")},
  {type:18,label:"Motivación y mejora personal",description:"¿Por qué quieres formar parte de la Policía? ¿Cuáles son tus virtudes y qué aspectos mejorarías?",component:modalInput("motivation","Escribe tu respuesta.")},
- {type:18,label:"Responsabilidad y órdenes",component:modalInput("detention_rights","Responde a la pregunta completa que aparece en el paso anterior.")},
- {type:18,label:"Mala praxis o corrupción",component:modalInput("scene_resolution","Responde a la pregunta completa que aparece en el paso anterior.")},
- {type:18,label:"Situaciones policiales",component:modalInput("roleplay_response","Responde a los dos casos que aparecen en el paso anterior.")}
+ {type:18,label:"Responsabilidad y órdenes",description:"¿Qué significa pertenecer a la Policía? ¿Cómo actuarías ante una orden incorrecta de un superior?",component:modalInput("detention_rights","Escribe tu respuesta.")},
+ {type:18,label:"Mala praxis o corrupción",description:"Si un compañero comete una falta grave o acepta un soborno, ¿qué harías y a quién informarías?",component:modalInput("scene_resolution","Escribe tu respuesta.")},
+ {type:18,label:"Situaciones policiales",description:"1) Varios vehículos sospechosos: ¿cómo pides apoyo? 2) Persona con bate agresiva: ¿cómo actúas?",component:modalInput("roleplay_response","Escribe tu respuesta.")}
 ]})}
 function values(interaction:any){const out:any={};const visit=(node:any)=>{if(!node||typeof node!=="object")return;if(typeof node.custom_id==="string"&&node.value!==undefined)out[node.custom_id]=String(node.value||"").trim();if(Array.isArray(node.components))for(const child of node.components)visit(child);if(node.component)visit(node.component)};for(const component of interaction.data?.components||[])visit(component);return out}
 async function handle(i:any){
@@ -106,7 +94,7 @@ async function handle(i:any){
    if(!canManage(i))return ephemeral("No tienes permiso para publicar las postulaciones.");
    EdgeRuntime.waitUntil((async()=>{
     try{
-     const applicationPanel={embeds:[{title:"📝 Preselección de ingreso · PRIME POLICE",description:"Completa la postulación para que **UCOP** revise tu solicitud. Cada persona dispone de un máximo de **3 intentos**.\n\nSi te aprueban, recibirás el rol **Preselección** y UCOP coordinará contigo una **entrevista IC**. Después de aprobarla, podrás solicitar el rol de Policía y tu rango desde <#"+RANK_REQUEST_CHANNEL_ID+">.",color:14264415,footer:{text:"PRIME POLICE · Preselección UCOP"}}],components:[{type:1,components:[{type:2,style:1,label:"Presentar postulación",custom_id:"prime_apply"}]}]};
+     const applicationPanel={embeds:[{title:"📝 Preselección de ingreso · PRIME POLICE",description:"Completa la postulación para que **UCOP** revise tu solicitud. Cada persona dispone de un máximo de **3 intentos**.\n\nAl pulsar **Presentar postulación** se abrirá un formulario privado: el canal no mostrará tus respuestas ni un mensaje por cada paso. Solo el personal autorizado las revisará desde la web.\n\nSi te aprueban, recibirás el rol **Preselección** y UCOP coordinará contigo una **entrevista IC**. Después podrás solicitar el rol de Policía y tu rango desde <#"+RANK_REQUEST_CHANNEL_ID+">.",color:14264415,footer:{text:"PRIME POLICE · Preselección UCOP"}}],components:[{type:1,components:[{type:2,style:1,label:"Presentar postulación",custom_id:"prime_apply"}]}]};
      const rankPanel={embeds:[{title:"📈 Solicitud de rango · UCOP",description:"Este formulario es para personas con rol **Preselección o Policía** que ya aprobaron su **entrevista IC**.\n\nCompleta el formulario. El acuse y las respuestas del formulario son privados: solo los verá quien lo envía. UCOP revisará la solicitud desde la web. Si aún no hay rangos configurados, se podrá aprobar solo el rol de **Policía** y añadir el rango más adelante.",color:14264415,footer:{text:"PRIME POLICE · Solicitudes UCOP · Respuesta privada"}}],components:[{type:1,components:[{type:2,style:2,label:"Solicitar rango",custom_id:"prime_rank_request"}]}]};
      await publishOrUpdatePanel(APPLICATION_ANNOUNCEMENTS_CHANNEL_ID,"prime_apply",applicationPanel);
      await publishOrUpdatePanel(RANK_REQUEST_CHANNEL_ID,"prime_rank_request",rankPanel);
@@ -123,11 +111,7 @@ async function handle(i:any){
   return ephemeral("Comando no reconocido.");
  }
  if(i.type===3){
-  if(i.data?.custom_id==="prime_apply"){
-   EdgeRuntime.waitUntil((async()=>{try{await editInteractionResponse(i,applicationInstructionsPayload())}catch(error){console.error("Could not show application instructions:",String(error))}})());
-   return response(5,{data:{flags:64}});
-  }
-  if(i.data?.custom_id==="prime_application_form")return modal();
+  if(i.data?.custom_id==="prime_apply")return modal();
   if(i.data?.custom_id==="prime_rank_request")return rankRequestModal();
   return ephemeral("Interacción no reconocida.");
  }
@@ -146,7 +130,7 @@ async function handle(i:any){
 }
 Deno.serve(async(req:Request)=>{
  if(req.method==="OPTIONS")return new Response(null,{status:204,headers:CORS});
- if(req.method==="GET")return json({ok:true,service:"PRIME POLICE Discord applications",release:"rank-form-private-2026-10-27c",configured:{discord:Boolean(BOT_TOKEN),database:Boolean(SUPABASE_URL&&SERVICE_KEY),public_key:Boolean(DISCORD_PUBLIC_KEY)},application_id:APPLICATION_ID,guild_id:GUILD_ID,commands:["publicar_postulaciones","postulacion"],message:DISCORD_PUBLIC_KEY?"Endpoint disponible.":"Falta configurar DISCORD_PUBLIC_KEY en los secretos de Supabase."});
+ if(req.method==="GET")return json({ok:true,service:"PRIME POLICE Discord applications",release:"private-modal-age-ooc-2026-10-28a",configured:{discord:Boolean(BOT_TOKEN),database:Boolean(SUPABASE_URL&&SERVICE_KEY),public_key:Boolean(DISCORD_PUBLIC_KEY)},application_id:APPLICATION_ID,guild_id:GUILD_ID,commands:["publicar_postulaciones","postulacion"],message:DISCORD_PUBLIC_KEY?"Endpoint disponible.":"Falta configurar DISCORD_PUBLIC_KEY en los secretos de Supabase."});
  if(req.method!=="POST")return json({error:"Method not allowed"},405);
  const body=await req.text();if(!await validSignature(req,body))return json({error:"Invalid Discord signature or DISCORD_PUBLIC_KEY not configured"},401);
  let i:any;try{i=JSON.parse(body)}catch{return json({error:"Invalid JSON"},400)}

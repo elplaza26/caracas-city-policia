@@ -2,7 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { handleHr } from "./hr.ts";
 
 const GUILD_ID = "1539970134469378068";
-const APPLICATION_CHANNEL_ID = "1539970136683847857";
+const LEGACY_APPLICATION_CHANNEL_ID = "1539970136683847857";
 const RESULTS_CHANNEL_ID = "1564350390294552696";
 const RANK_AUDIT_CHANNEL_ID = "1539970137246142604";
 const POLICE_ROLE_ID = "1539970134482092038";
@@ -304,24 +304,6 @@ async function listApplications(req: Request) {
   }
 }
 
-async function findApplicationMessage(applicationId: string): Promise<any | null> {
-  const messages = await discord("/channels/" + APPLICATION_CHANNEL_ID + "/messages?limit=100") as any[];
-  const target = (messages ?? []).find((message: any) => {
-    const id = String(applicationId);
-    if (String(message.content ?? "").includes(id)) return true;
-    if ((message.embeds ?? []).some((embed: any) =>
-      String(embed.description ?? "").includes(id) || String(embed.footer?.text ?? "").includes(id) ||
-      (embed.fields ?? []).some((field: any) => String(field.value ?? "").includes(id))
-    )) return true;
-    return (message.components ?? []).some((row: any) =>
-      (row.components ?? []).some((component: any) =>
-        String(component.custom_id ?? "").endsWith(":" + id)
-      )
-    );
-  });
-  return target ?? null;
-}
-
 async function decide(req: Request) {
   const reviewerId = await authorizedUser(req);
   if (!reviewerId) return json({ error: "Sesión caducada o sin permisos de gestión." }, 403);
@@ -435,74 +417,21 @@ async function decide(req: Request) {
     return json({ error: "No se pudo guardar la decisión en la base de datos." }, 500);
   }
 
-      const statusText = action === "accept" ? "✅ Aceptada · rol de Preselección asignado" : "❌ No seleccionada";
-  const content = "📋 **Postulación revisada**\n" +
-    "**Candidato:** <@" + String(app.discord_user_id) + ">\n" +
-    "**Estado:** " + statusText + "\n" +
-    "**Revisado por:** <@" + reviewerId + ">\n" +
-    "**Intento:** " + String(app.attempt_number ?? 1) + "/3\n" +
-    "**Solicitud:** " + id;
-  let discordSynced = false;
-  let messageId = String(app.discord_message_id ?? "");
-
-  // First try the exact message ID already stored for this application.
-  if (messageId) {
+  // Application content stays in the protected database and panel; do not publish per-app messages to Discord.
+  const oldMessageId = String(app.discord_message_id ?? "");
+  if (oldMessageId) {
+    const statusText = action === "accept" ? "✅ Aceptada · rol de Preselección asignado" : "❌ No seleccionada";
+    const content = "📋 **Postulación revisada**\n" +
+      "**Candidato:** <@" + String(app.discord_user_id) + ">\n" +
+      "**Estado:** " + statusText + "\n" +
+      "**Revisado por:** <@" + reviewerId + ">\n" +
+      "**Intento:** " + String(app.attempt_number ?? 1) + "/3\n" +
+      "**Solicitud:** " + id;
     try {
-      await discord(
-        "/channels/" + APPLICATION_CHANNEL_ID + "/messages/" + encodeURIComponent(messageId),
-        { method: "PATCH", body: JSON.stringify({ content, embeds: [], components: [] }) },
-      );
-      discordSynced = true;
-    } catch (e) {
-      console.error("Could not edit stored application message; will search Discord:", String(e));
-      messageId = "";
-    }
-  }
-
-  // Older applications may not have discord_message_id. Find their original message
-  // by the application UUID in its embed or button IDs so stale buttons can be removed.
-  if (!discordSynced) {
-    try {
-      const existingMessage = await findApplicationMessage(id);
-      if (existingMessage?.id) {
-        await discord(
-          "/channels/" + APPLICATION_CHANNEL_ID + "/messages/" + encodeURIComponent(existingMessage.id),
-          { method: "PATCH", body: JSON.stringify({ content, embeds: [], components: [] }) },
-        );
-        messageId = String(existingMessage.id);
-        discordSynced = true;
-      }
-    } catch (e) {
-      console.error("Could not find/edit original application message:", String(e));
-    }
-  }
-
-  // If the original is no longer available, publish a decision receipt instead.
-  if (!discordSynced) {
-    try {
-      const posted = await discord("/channels/" + APPLICATION_CHANNEL_ID + "/messages", {
-        method: "POST",
-        body: JSON.stringify({ content }),
-      }) as any;
-      if (posted?.id) {
-        messageId = String(posted.id);
-        discordSynced = true;
-      }
-    } catch (e) {
-      console.error("Could not publish decision to Discord:", String(e));
-    }
-  }
-
-  // Persist the recovered/new message ID so subsequent decisions can edit it directly.
-  if (discordSynced && messageId && messageId !== String(app.discord_message_id ?? "")) {
-    try {
-      await db(
-        "police_applications?id=eq." + encodeURIComponent(id),
-        { method: "PATCH", body: JSON.stringify({ discord_message_id: messageId }) },
-      );
-    } catch (e) {
-      console.error("Could not persist Discord message ID:", String(e));
-    }
+      await discord("/channels/" + LEGACY_APPLICATION_CHANNEL_ID + "/messages/" + encodeURIComponent(oldMessageId), {
+        method: "PATCH", body: JSON.stringify({ content, embeds: [], components: [] }),
+      });
+    } catch (error) { console.error("Could not redact old application message:", String(error)); }
   }
 
   let resultsNotified = !isNewDecision;
@@ -533,11 +462,10 @@ async function decide(req: Request) {
     ok: true,
     status: finalApp.status,
     role_assigned: action === "accept" && Boolean(finalApp.role_assigned_at),
-    discord_synced: discordSynced,
     results_notified: resultsNotified,
     warning: !preselectionSynced
       ? "La candidatura se aceptó, pero no se guardó en la base de preseleccionados. Avísale a un administrador para revisar el registro."
-      : discordSynced && resultsNotified ? undefined : "La decisión se guardó, pero Discord no confirmó todos los mensajes.",
+      : resultsNotified ? undefined : "La decisión se guardó, pero no se pudo publicar el resultado en el canal correspondiente.",
   });
 }
 
@@ -574,7 +502,7 @@ Deno.serve(async (req: Request) => {
       commands_registered: commandsRegistered,
       configured: { discord: Boolean(BOT_TOKEN), database: Boolean(SUPABASE_URL && SERVICE_KEY), discord_oauth: Boolean(DISCORD_OAUTH_CLIENT_SECRET) },
       warning: commandsRegistered ? undefined : "La API está activa, pero no se pudieron actualizar los comandos de Discord.",
-      version: "rank-only-review-2026-10-27b",
+      version: "preselection-private-applications-2026-10-28a",
     });
   }
   return json({ error: "Método no permitido." }, 405);

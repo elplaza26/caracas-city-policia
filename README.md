@@ -4,7 +4,7 @@ Panel privado de gestión de personal de PRIME POLICE, orientado a UCOP y RR. HH
 
 ## Módulos
 
-- **Postulaciones:** revisión de respuestas, aceptación o rechazo y asignación del rol de Preselección al aceptar.
+- **Postulaciones:** formulario modal privado, registro de nombre/edad IC y edad OOC, revisión desde la web, aceptación o rechazo y asignación del rol de Preselección.
 - **Solicitudes de rango:** revisión de las solicitudes enviadas por el personal desde Discord.
 - **Preseleccionados:** base independiente para personas aceptadas que todavía no han ingresado en la Policía.
 - **Personal de Policía:** fichas con nombre IC/OOC, placa, usuario de Discord, rango, unidad y estado; búsqueda, filtros y expediente individual.
