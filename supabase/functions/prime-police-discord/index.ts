@@ -47,8 +47,11 @@ async function processApplicationSubmit(i:any,userId:string,username:string,a:an
 }
 async function processTransferSubmit(i:any,userId:string,username:string,a:any){
  const fullName=String(a.full_name||"").trim().slice(0,100);
- const ageText=String(a.age_ic||"").trim();
- const age=/^\d{1,3}$/.test(ageText)?Number(ageText):NaN;
+ const ageDetails=String(a.age_details||"");
+ const ageIcText=ageDetails.match(/edad\s*IC\s*:\s*(\d{1,3})/i)?.[1]||"";
+ const ageOocText=ageDetails.match(/edad\s*OOC\s*:\s*(\d{1,3})/i)?.[1]||"";
+ const ageIc=/^\d{1,3}$/.test(ageIcText)?Number(ageIcText):NaN;
+ const ageOoc=/^\d{1,3}$/.test(ageOocText)?Number(ageOocText):NaN;
  const origin=String(a.source_data||"");
  const city=(origin.match(/ciudad\s*:\s*([^|\n]+)/i)?.[1]||"").trim().slice(0,100);
  const faction=(origin.match(/facción\s*:\s*([^|\n]+)/i)?.[1]||"").trim().slice(0,100);
@@ -58,13 +61,13 @@ async function processTransferSubmit(i:any,userId:string,username:string,a:any){
  const requested=String(a.transfer_reason||"").trim().slice(0,1000);
  const desired=(requested.match(/rango\s*solicitado\s*:\s*([^|\n]+)/i)?.[1]||"").trim().slice(0,100);
  const reason=requested.replace(/rango\s*solicitado\s*:\s*[^|\n]+\s*\|?\s*/i,"").trim();
- if(!fullName||!Number.isInteger(age)||age<1||age>120||!city||!faction||!rank||!reason){await editInteractionReply(i,"Completa nombre, edad IC, ciudad, facción, rango actual y motivo del traslado.");return;}
+ if(!fullName||!Number.isInteger(ageIc)||ageIc<1||ageIc>120||!Number.isInteger(ageOoc)||ageOoc<1||ageOoc>120||!city||!faction||!rank||!reason){await editInteractionReply(i,"Completa nombre, edad IC y OOC, ciudad, facción, rango actual y motivo del traslado.");return;}
  const pending=await db("police_transfer_applications?select=id&discord_user_id=eq."+encodeURIComponent(userId)+"&status=eq.pending&limit=1");
  if(pending?.length){await editInteractionReply(i,"Ya tienes una solicitud de traslado pendiente de revisión por UCOP.");return;}
  const previous=await db("police_transfer_applications?select=attempt_number&discord_user_id=eq."+encodeURIComponent(userId)+"&order=created_at.asc");
  if(previous?.length>=3){await editInteractionReply(i,"Ya utilizaste tus 3 intentos para solicitar un traslado a PRIME POLICE.");return;}
  try {
-  const rows=await db("police_transfer_applications",{method:"POST",body:JSON.stringify({discord_user_id:userId,discord_username:username,full_name:fullName,age_ic:age,source_city:city,source_faction:faction,current_rank:rank,current_unit:unit,requested_rank:desired,reason,attempt_number:previous.length+1})});
+  const rows=await db("police_transfer_applications",{method:"POST",body:JSON.stringify({discord_user_id:userId,discord_username:username,full_name:fullName,age_ic:ageIc,age_ooc:ageOoc,source_city:city,source_faction:faction,current_rank:rank,current_unit:unit,requested_rank:desired,reason,attempt_number:previous.length+1})});
   if(!rows?.[0]?.id)throw Error("Transfer request was not stored");
  } catch(error){
   if(String(error).includes("409")){await editInteractionReply(i,"Ya tienes una solicitud de traslado pendiente de revisión por UCOP.");return;}
@@ -112,7 +115,7 @@ function modal(){return response(9,{custom_id:"prime_application_submit",title:"
 ]})}
 function transferModal(){return response(9,{custom_id:"prime_transfer_submit",title:"Traslado · PRIME POLICE",components:[
  {type:18,label:"Nombre IC",description:"Indica nombre y apellido de tu personaje.",component:modalInput("full_name","Nombre y apellido IC",true,1)},
- {type:18,label:"Edad IC",component:modalInput("age_ic","Edad de tu personaje",true,1,3)},
+ {type:18,label:"Edad IC y edad OOC",description:"Indica ambas edades con este formato.",component:modalInput("age_details","Edad IC: ... | Edad OOC: ...",true,1)},
  {type:18,label:"Ciudad y facción de procedencia",description:"Escribe ambos datos con este formato.",component:modalInput("source_data","Ciudad: ... | Facción: ...",true)},
  {type:18,label:"Rango y unidad actuales",description:"Indica tu rango y unidad/división actual.",component:modalInput("current_data","Rango: ... | Unidad: ...",true)},
  {type:18,label:"Rango solicitado y motivo",description:"Formato: Rango solicitado: ... | Motivo: ...",component:modalInput("transfer_reason","Rango solicitado: ... | Motivo: ...",true)}
@@ -139,7 +142,7 @@ async function handle(i:any){
      try{await editInteractionReply(i,"No se pudo publicar el formulario. Comprueba los permisos del bot y vuelve a intentarlo.");}catch(replyError){console.error("Could not update deferred interaction:",String(replyError));}
     }
    })());
-   return response(5,{data:{flags:64}});
+   return ephemeral("Actualizando los paneles de Discord… Solo tú puedes ver esta confirmación.");
   }
   if(name==="postulacion")return ephemeral("Para postularte a PRIME POLICE, busca el mensaje de reclutamiento y pulsa **Presentar postulación**. Si no aparece, avisa a un administrador.");
   if(name==="panel_codigo")return ephemeral("El acceso por código se ha sustituido. Entra desde la web con tu cuenta de Discord y un rol autorizado.");
@@ -171,7 +174,7 @@ async function handle(i:any){
 }
 Deno.serve(async(req:Request)=>{
  if(req.method==="OPTIONS")return new Response(null,{status:204,headers:CORS});
- if(req.method==="GET")return json({ok:true,service:"PRIME POLICE Discord applications",release:"private-transfer-2026-10-28a",configured:{discord:Boolean(BOT_TOKEN),database:Boolean(SUPABASE_URL&&SERVICE_KEY),public_key:Boolean(DISCORD_PUBLIC_KEY)},application_id:APPLICATION_ID,guild_id:GUILD_ID,commands:["publicar_postulaciones","postulacion"],message:DISCORD_PUBLIC_KEY?"Endpoint disponible.":"Falta configurar DISCORD_PUBLIC_KEY en los secretos de Supabase."});
+ if(req.method==="GET")return json({ok:true,service:"PRIME POLICE Discord applications",release:"private-transfer-age-privacy-2026-10-28b",configured:{discord:Boolean(BOT_TOKEN),database:Boolean(SUPABASE_URL&&SERVICE_KEY),public_key:Boolean(DISCORD_PUBLIC_KEY)},application_id:APPLICATION_ID,guild_id:GUILD_ID,commands:["publicar_postulaciones","postulacion"],message:DISCORD_PUBLIC_KEY?"Endpoint disponible.":"Falta configurar DISCORD_PUBLIC_KEY en los secretos de Supabase."});
  if(req.method!=="POST")return json({error:"Method not allowed"},405);
  const body=await req.text();if(!await validSignature(req,body))return json({error:"Invalid Discord signature or DISCORD_PUBLIC_KEY not configured"},401);
  let i:any;try{i=JSON.parse(body)}catch{return json({error:"Invalid JSON"},400)}
