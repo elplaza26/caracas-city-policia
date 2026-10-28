@@ -239,7 +239,7 @@ async function request(action, options) {
   const headers = {"Content-Type":"application/json"};
   if (token && action !== "login") headers.Authorization = "Bearer " + token;
   const response = await fetch(API_BASE + "?panel=" + encodeURIComponent(action), {
-    method: options.method || (["data","me","personnel","preselections","rank-config","rank-history","rank-requests","sanctions"].includes(action) ? "GET" : "POST"),
+    method: options.method || (["data","me","personnel","preselections","rank-config","rank-history","rank-requests","sanctions","transfers"].includes(action) ? "GET" : "POST"),
     headers,
     body: options.body ? JSON.stringify(options.body) : undefined
   });
