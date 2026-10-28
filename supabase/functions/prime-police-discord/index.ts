@@ -7,6 +7,9 @@ const APPLICATION_ANNOUNCEMENTS_CHANNEL_ID = "1539970135375478860";
 const RANK_REQUEST_CHANNEL_ID = "1539970135375478859";
 const TRANSFER_CHANNEL_ID = "1564900830077788190";
 const POLICE_ONLY_RANK_LABEL = "Solo rol de Policía (sin rango configurado)";
+function normalizeRankName(value: unknown) {
+ return String(value||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLocaleLowerCase("es").replace(/[^a-z0-9]+/g," ").trim().replace(/\s+/g," ");
+}
 const APPLICATION_ID = "1540484542354428025";
 const MANAGER_ROLE_IDS = new Set(["1539970134565982313", "1539970134544748562", "1539970134544748556", "1539970134544748557", "1539970134519578773", "1539970134519578774"]);
 const canManage = (i:any) => (i.member?.roles || []).some((role:string) => MANAGER_ROLE_IDS.has(role));
@@ -87,13 +90,13 @@ async function processRankRequest(i:any,userId:string,username:string,a:any){
  const member=await discord("/guilds/"+GUILD_ID+"/members/"+encodeURIComponent(userId)) as any;
  const roles:string[]=member?.roles||[];
  if((!roles.includes(PRESELECTION_ROLE_ID)&&!roles.includes(POLICE_ROLE_ID))||roles.includes(CIC_ROLE_ID)||roles.includes(EXPELLED_ROLE_ID)){await editInteractionReply(i,"Solo las personas con rol Preselección o Policía pueden solicitar rango tras su entrevista IC.");return;}
- const configured=await db("police_rank_roles?select=role_name");
+ const configured=await db("police_rank_roles?select=role_id,role_name");
  const ranks=configured||[];
  let rank:any=null;
  let rankName="";
  if(!ranks.length)rankName=POLICE_ONLY_RANK_LABEL;
  else if(!requestedRank){await editInteractionReply(i,"UCOP ya configuró rangos. Indica el rango solicitado en el formulario.");return;}
- else{rank=ranks.find((row:any)=>String(row.role_name||"").trim().toLocaleLowerCase("es")===requestedRank.toLocaleLowerCase("es"));if(!rank){const names=ranks.map((row:any)=>String(row.role_name||"")).filter(Boolean);await editInteractionReply(i,names.length?"Ese rango no está configurado. Rangos disponibles: "+names.join(", "):"UCOP todavía no ha configurado rangos en la web.");return;}rankName=String(rank.role_name);}
+ else{const normalizedRequest=normalizeRankName(requestedRank);rank=ranks.find((row:any)=>normalizeRankName(row.role_name)===normalizedRequest||String(row.role_id||"")===requestedRank);if(!rank){const names=ranks.map((row:any)=>String(row.role_name||"")).filter(Boolean);await editInteractionReply(i,names.length?"No encontré ese rango. Copia uno de estos nombres tal como aparece en la web: "+names.slice(0,20).join(", ")+(names.length>20?"…":""):"UCOP todavía no ha configurado rangos en la web.");return;}rankName=String(rank.role_name);}
  const pending=await db("police_rank_requests?select=id&discord_user_id=eq."+encodeURIComponent(userId)+"&status=eq.pending&limit=1");
  if(pending?.length){await editInteractionReply(i,"Ya tienes una solicitud de rango pendiente de revisión por UCOP.");return;}
  const rows=await db("police_rank_requests",{method:"POST",body:JSON.stringify({discord_user_id:userId,discord_username:username,character_name:characterName,plate,requested_rank_name:rankName,approved_by_name:approvedBy})});
