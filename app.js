@@ -33,6 +33,7 @@ function showLogin() {
   $("loginView").classList.remove("hidden");
   $("appView").classList.add("hidden");
 }
+function openDashboardWhenReady(){const open=()=>{if(token&&typeof loadDashboard==='function')document.querySelector('button[data-view="dashboard"]').click();};if(typeof loadDashboard==='function')open();else document.addEventListener('DOMContentLoaded',open,{once:true});}
 function showApp() {
   $("sideNav").classList.remove("hidden");
   $("accountCard").classList.remove("hidden");
@@ -533,7 +534,7 @@ if (oauthErrorFromUrl) {
     $("loginError").textContent = "";
     showApp();
     await loadAccountProfile();
-    if(token)document.querySelector('button[data-view="dashboard"]').click();
+    openDashboardWhenReady();
   }).catch(error => {
     showLogin();
     $("loginError").textContent = error.message || "El acceso expiró. Vuelve a entrar con Discord.";
@@ -543,7 +544,7 @@ if (oauthErrorFromUrl) {
   });
 } else if (token) {
   showApp();
-  loadAccountProfile().then(()=>{if(token)document.querySelector('button[data-view="dashboard"]').click();});
+  loadAccountProfile().then(()=>{openDashboardWhenReady();});
 } else {
   showLogin();
 }
