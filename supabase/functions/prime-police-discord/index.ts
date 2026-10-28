@@ -83,16 +83,17 @@ async function processTransferSubmit(i:any,userId:string,username:string,a:any){
 }
 async function processRankRequest(i:any,userId:string,username:string,a:any){
  const characterName=String(a.character_name||"").trim().slice(0,100);
+ const steamUsername=String(a.steam_username||"").trim().slice(0,100);
  const plate=String(a.plate||"").trim().slice(0,30);
  const approvedBy=String(a.approved_by||"").replace(/@/g,"").trim().slice(0,100);
- if(!characterName||!plate||!approvedBy){await editInteractionReply(i,"Completa nombre IC, placa y nombre de quien aprobó la entrevista.");return;}
+ if(!characterName||!plate||!approvedBy||!steamUsername){await editInteractionReply(i,"Completa nombre IC, usuario de Steam, placa y nombre de quien aprobó la entrevista.");return;}
  const member=await discord("/guilds/"+GUILD_ID+"/members/"+encodeURIComponent(userId)) as any;
  const roles:string[]=member?.roles||[];
  if((!roles.includes(PRESELECTION_ROLE_ID)&&!roles.includes(POLICE_ROLE_ID))||roles.includes(EXPELLED_ROLE_ID)){await editInteractionReply(i,"Solo las personas con rol Preselección o Policía pueden solicitar el ingreso tras su entrevista IC.");return;}
  const rankName=POLICE_ONLY_RANK_LABEL;
  const pending=await db("police_rank_requests?select=id&discord_user_id=eq."+encodeURIComponent(userId)+"&status=eq.pending&limit=1");
  if(pending?.length){await editInteractionReply(i,"Ya tienes una solicitud de ingreso pendiente de revisión por UCOP.");return;}
- const rows=await db("police_rank_requests",{method:"POST",body:JSON.stringify({discord_user_id:userId,discord_username:username,character_name:characterName,plate,requested_rank_name:rankName,approved_by_name:approvedBy})});
+ const rows=await db("police_rank_requests",{method:"POST",body:JSON.stringify({discord_user_id:userId,discord_username:username,character_name:characterName,steam_username:steamUsername,plate,requested_rank_name:rankName,approved_by_name:approvedBy})});
  const request=rows?.[0];
  if(!request?.id)throw Error("Rank request was not stored");
  await editInteractionReply(i,"Solicitud de ingreso enviada en privado a UCOP. Al aprobarla desde la web se asignará únicamente el rol Policía.");
@@ -101,6 +102,7 @@ const modalInput=(id:string,placeholder:string,required=true,style=2,maxLength=s
 function rankRequestModal(){return response(9,{custom_id:"prime_rank_request_submit",title:"Nuevo ingreso · UCOP",components:[
  {type:10,content:"Completa tus datos después de aprobar la entrevista IC."},
  {type:18,label:"Nombre IC",component:modalInput("character_name","Nombre de tu personaje.",true,1)},
+ {type:18,label:"Usuario de Steam",component:modalInput("steam_username","Tu usuario o identificador de Steam.",true,1)},
  {type:18,label:"Número de placa",component:modalInput("plate","Número de placa policial.",true,1,30)},
  {type:18,label:"Aprobado por (sin @)",description:"Indica el nombre de quien aprobó tu entrevista IC.",component:modalInput("approved_by","Escribe el nombre, sin mencionar a nadie.",true,1)}
 ]})}

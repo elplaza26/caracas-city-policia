@@ -163,7 +163,7 @@ async function allowed(req: Request) {
 }async function listPersonnel(req: Request) {
   const auth = await allowed(req); if (auth.error) return auth.error;
   try {
-    const records = await db("police_personnel?select=discord_user_id,discord_username,full_name,name_ooc,plate,unit,rank_name,rank_role_id,status,source_application_id,created_at,updated_at,last_rank_change_at&unit=in.(UCOP,CIC)&order=full_name.asc&limit=500");
+    const records = await db("police_personnel?select=discord_user_id,discord_username,full_name,name_ooc,steam_username,plate,unit,rank_name,rank_role_id,status,source_application_id,created_at,updated_at,last_rank_change_at&unit=in.(UCOP,CIC)&order=full_name.asc&limit=500");
     return json({ ok: true, personnel: records ?? [] });
   } catch (error) { console.error("Personnel list error:", String(error)); return json({ error: "No se pudo cargar la base de personal." }, 500); }
 }
@@ -377,7 +377,7 @@ async function reviewRankRequest(req: Request) {
       try {
         if (addedPoliceRole) await discord("/guilds/" + GUILD_ID + "/members/" + enc(targetId) + "/roles/" + POLICE_ROLE_ID, { method: "PUT", body: "{}" });
         await updatePersonnelNickname(targetId, String(rankRequest.character_name), String(rankRequest.plate), "PRIME POLICE: ingreso aprobado tras entrevista IC"); nicknameChanged = true;
-        await db("police_personnel?on_conflict=discord_user_id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=representation" }, body: JSON.stringify({ discord_user_id: targetId, discord_username: rankRequest.discord_username, full_name: rankRequest.character_name, name_ooc: profile?.name_ooc || rankRequest.discord_username, plate: rankRequest.plate, unit: profile?.unit || (memberRoles.includes(CIC_ROLE_ID) ? "CIC" : "UCOP"), rank_name: profile?.rank_name || "Pendiente de asignación", rank_role_id: profile?.rank_role_id || null, status: "active", updated_at: new Date().toISOString() }) });
+        await db("police_personnel?on_conflict=discord_user_id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=representation" }, body: JSON.stringify({ discord_user_id: targetId, discord_username: rankRequest.discord_username, full_name: rankRequest.character_name, name_ooc: profile?.name_ooc || rankRequest.discord_username, steam_username: rankRequest.steam_username || profile?.steam_username || "", plate: rankRequest.plate, unit: profile?.unit || (memberRoles.includes(CIC_ROLE_ID) ? "CIC" : "UCOP"), rank_name: profile?.rank_name || "Pendiente de asignación", rank_role_id: profile?.rank_role_id || null, status: "active", updated_at: new Date().toISOString() }) });
       } catch (error) {
         try {
           if (nicknameChanged) await discord("/guilds/" + GUILD_ID + "/members/" + enc(targetId), { method: "PATCH", body: JSON.stringify({ nick: member.nick ?? null }) });
