@@ -1,4 +1,3 @@
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { handleHr } from "./hr.ts";
 
 const GUILD_ID = "1539970134469378068";
