@@ -14,7 +14,7 @@ const BOT_TOKEN = Deno.env.get("DISCORD_BOT_TOKEN") ?? "";
 const DISCORD_PUBLIC_KEY = "00d2404753364bae3875ef0fb6f98707e642a08405a1fb3b97bcd391bd183d57";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-const CORS = {"Access-Control-Allow-Origin":"*","Access-Control-Allow-Headers":"authorization, apikey, content-type","Access-Control-Allow-Methods":"GET, POST, OPTIONS","Vary":"Origin"};
+const CORS = {"Access-Control-Allow-Origin":"https://primepolicerp.github.io","Access-Control-Allow-Headers":"authorization, apikey, content-type","Access-Control-Allow-Methods":"GET, POST, OPTIONS","Vary":"Origin","Cache-Control":"no-store","X-Content-Type-Options":"nosniff","X-Frame-Options":"DENY","Referrer-Policy":"no-referrer"};
 const json = (data:unknown,status=200)=>new Response(JSON.stringify(data),{status,headers:{"content-type":"application/json",...CORS}});
 const encoder = new TextEncoder();
 const hexBytes=(hex:string)=>new Uint8Array((hex.match(/.{1,2}/g)||[]).map(x=>parseInt(x,16)));
@@ -48,20 +48,31 @@ async function processApplicationSubmit(i:any,userId:string,username:string,a:an
 async function processTransferSubmit(i:any,userId:string,username:string,a:any){
  const fullName=String(a.full_name||"").trim().slice(0,100);
  const ageDetails=String(a.age_details||"");
- const ageIcText=ageDetails.match(/edad\s*IC\s*:\s*(\d{1,3})/i)?.[1]||"";
- const ageOocText=ageDetails.match(/edad\s*OOC\s*:\s*(\d{1,3})/i)?.[1]||"";
- const ageIc=/^\d{1,3}$/.test(ageIcText)?Number(ageIcText):NaN;
- const ageOoc=/^\d{1,3}$/.test(ageOocText)?Number(ageOocText):NaN;
+ const ageIcText=ageDetails.match(/edad\s*IC\s*[:=\-]?\s*(\d{1,3})/i)?.[1]||"";
+ const ageOocText=ageDetails.match(/edad\s*OOC\s*[:=\-]?\s*(\d{1,3})/i)?.[1]||"";
+ const ageNumbers=ageDetails.match(/\d{1,3}/g)||[];
+ const ageIc=Number(ageIcText|| (ageNumbers.length===2?ageNumbers[0]:NaN));
+ const ageOoc=Number(ageOocText|| (ageNumbers.length===2?ageNumbers[1]:NaN));
  const origin=String(a.source_data||"");
- const city=(origin.match(/ciudad\s*:\s*([^|\n]+)/i)?.[1]||"").trim().slice(0,100);
- const faction=(origin.match(/facción\s*:\s*([^|\n]+)/i)?.[1]||"").trim().slice(0,100);
+ const originParts=origin.split(/\s*(?:\||\r?\n|;|,|\/)\s*|\s+-\s+/).map((part:string)=>part.trim()).filter(Boolean);
+ const city=(origin.match(/ciudad\s*[:=\-]?\s*([^|\n;,/]+)/i)?.[1]||originParts[0]||"").replace(/^ciudad\s*[:=\-]?\s*/i,"").trim().slice(0,100);
+ const faction=(origin.match(/facc(?:i|í)on\s*[:=\-]?\s*([^|\n;,/]+)/i)?.[1]||originParts[1]||"").replace(/^facc(?:i|í)on\s*[:=\-]?\s*/i,"").trim().slice(0,100);
  const current=String(a.current_data||"");
- const rank=(current.match(/rango\s*:\s*([^|\n]+)/i)?.[1]||"").trim().slice(0,100);
- const unit=(current.match(/unidad\s*:\s*([^|\n]+)/i)?.[1]||"").trim().slice(0,100);
+ const currentParts=current.split(/\s*(?:\||\r?\n|;|,|\/)\s*|\s+-\s+/).map((part:string)=>part.trim()).filter(Boolean);
+ const rank=(current.match(/rango(?:\s+actual)?\s*[:=\-]?\s*([^|\n;,/]+)/i)?.[1]||currentParts[0]||"").replace(/^rango(?:\s+actual)?\s*[:=\-]?\s*/i,"").trim().slice(0,100);
+ const unit=(current.match(/(?:unidad|divisi[oó]n)\s*[:=\-]?\s*([^|\n;,/]+)/i)?.[1]||currentParts[1]||"").replace(/^(?:unidad|divisi[oó]n)\s*[:=\-]?\s*/i,"").trim().slice(0,100);
  const requested=String(a.transfer_reason||"").trim().slice(0,1000);
- const desired=(requested.match(/rango\s*solicitado\s*:\s*([^|\n]+)/i)?.[1]||"").trim().slice(0,100);
- const reason=requested.replace(/rango\s*solicitado\s*:\s*[^|\n]+\s*\|?\s*/i,"").trim();
- if(!fullName||!Number.isInteger(ageIc)||ageIc<1||ageIc>120||!Number.isInteger(ageOoc)||ageOoc<1||ageOoc>120||!city||!faction||!rank||!reason){await editInteractionReply(i,"Completa nombre, edad IC y OOC, ciudad, facción, rango actual y motivo del traslado.");return;}
+ const desired=(requested.match(/rango\s*solicitado\s*[:=\-]?\s*([^|\n;,]+)/i)?.[1]||"").trim().slice(0,100);
+ const explicitReason=requested.match(/motivo\s*[:=\-]?\s*([\s\S]+)/i)?.[1]||"";
+ const reason=(explicitReason||requested.replace(/rango\s*solicitado\s*[:=\-]?\s*[^|\n;,]+\s*(?:\|\s*)?/i,"")).trim().slice(0,1000);
+ const missing:string[]=[];
+ if(!fullName)missing.push("nombre IC");
+ if(!Number.isInteger(ageIc)||ageIc<1||ageIc>120||!Number.isInteger(ageOoc)||ageOoc<1||ageOoc>120)missing.push("dos edades (ejemplo: 25 / 18)");
+ if(!city)missing.push("ciudad de procedencia");
+ if(!faction)missing.push("facción de procedencia");
+ if(!rank)missing.push("rango actual");
+ if(!reason)missing.push("motivo");
+ if(missing.length){await editInteractionReply(i,"No se registró la solicitud. Revisa estos campos: "+missing.join(", ")+". Puedes escribir las parejas separadas por / o |; por ejemplo: Ciudad: Los Santos | Facción: Policía.");return;}
  const pending=await db("police_transfer_applications?select=id&discord_user_id=eq."+encodeURIComponent(userId)+"&status=eq.pending&limit=1");
  if(pending?.length){await editInteractionReply(i,"Ya tienes una solicitud de traslado pendiente de revisión por UCOP.");return;}
  const previous=await db("police_transfer_applications?select=attempt_number&discord_user_id=eq."+encodeURIComponent(userId)+"&order=created_at.asc");
@@ -115,10 +126,10 @@ function modal(){return response(9,{custom_id:"prime_application_submit",title:"
 ]})}
 function transferModal(){return response(9,{custom_id:"prime_transfer_submit",title:"Traslado · PRIME POLICE",components:[
  {type:18,label:"Nombre IC",description:"Indica nombre y apellido de tu personaje.",component:modalInput("full_name","Nombre y apellido IC",true,1)},
- {type:18,label:"Edad IC y edad OOC",description:"Indica ambas edades con este formato.",component:modalInput("age_details","Edad IC: ... | Edad OOC: ...",true,1)},
- {type:18,label:"Ciudad y facción de procedencia",description:"Escribe ambos datos con este formato.",component:modalInput("source_data","Ciudad: ... | Facción: ...",true)},
- {type:18,label:"Rango y unidad actuales",description:"Indica tu rango y unidad/división actual.",component:modalInput("current_data","Rango: ... | Unidad: ...",true)},
- {type:18,label:"Rango solicitado y motivo",description:"Formato: Rango solicitado: ... | Motivo: ...",component:modalInput("transfer_reason","Rango solicitado: ... | Motivo: ...",true)}
+ {type:18,label:"Edad IC y edad OOC",description:"Ejemplo: 25 / 18 (primero IC, después OOC).",component:modalInput("age_details","Edad IC: 25 | Edad OOC: 18",true,1)},
+ {type:18,label:"Ciudad y facción de procedencia",description:"Ejemplo: Los Santos | Policía Metropolitana.",component:modalInput("source_data","Ciudad: Los Santos | Facción: ...",true)},
+ {type:18,label:"Rango y unidad actuales",description:"Ejemplo: Sargento | Patrulla.",component:modalInput("current_data","Rango: ... | Unidad: ...",true)},
+ {type:18,label:"Rango solicitado y motivo",description:"El rango es opcional. Escribe el motivo aunque no tengas rango solicitado.",component:modalInput("transfer_reason","Rango solicitado: ... | Motivo: ...",true)}
 ]})}
 function values(interaction:any){const out:any={};const visit=(node:any)=>{if(!node||typeof node!=="object")return;if(typeof node.custom_id==="string"&&node.value!==undefined)out[node.custom_id]=String(node.value||"").trim();if(Array.isArray(node.components))for(const child of node.components)visit(child);if(node.component)visit(node.component)};for(const component of interaction.data?.components||[])visit(component);return out}
 async function handle(i:any){
@@ -167,14 +178,14 @@ async function handle(i:any){
  }
  if(i.type===5&&i.data?.custom_id==="prime_transfer_submit"){
   const a=values(i);
-  EdgeRuntime.waitUntil((async()=>{try{await processTransferSubmit(i,userId,username,a);}catch(error){console.error("Could not process transfer submit:",String(error));try{await editInteractionReply(i,"No se pudo completar el envío. Contacta con UCOP antes de volver a enviarlo.");}catch(replyError){console.error("Could not update transfer interaction:",String(replyError));}}})());
+  EdgeRuntime.waitUntil((async()=>{try{await processTransferSubmit(i,userId,username,a);}catch(error){const detail=String(error);console.error("Could not process transfer submit:",detail);const message=detail.includes("DB 400")||detail.includes("DB 404")?"El formulario está completo, pero no se guardó porque la base de datos de traslados necesita actualizarse. Contacta con UCOP; no vuelvas a enviarlo todavía.":"No se pudo guardar la solicitud. Contacta con UCOP antes de volver a enviarla.";try{await editInteractionReply(i,message);}catch(replyError){console.error("Could not update transfer interaction:",String(replyError));}}})());
   return response(5,{data:{flags:64}});
  }
  return ephemeral("Interacción no compatible.");
 }
 Deno.serve(async(req:Request)=>{
  if(req.method==="OPTIONS")return new Response(null,{status:204,headers:CORS});
- if(req.method==="GET")return json({ok:true,service:"PRIME POLICE Discord applications",release:"private-transfer-age-privacy-2026-10-28b",configured:{discord:Boolean(BOT_TOKEN),database:Boolean(SUPABASE_URL&&SERVICE_KEY),public_key:Boolean(DISCORD_PUBLIC_KEY)},application_id:APPLICATION_ID,guild_id:GUILD_ID,commands:["publicar_postulaciones","postulacion"],message:DISCORD_PUBLIC_KEY?"Endpoint disponible.":"Falta configurar DISCORD_PUBLIC_KEY en los secretos de Supabase."});
+ if(req.method==="GET")return json({ok:true,service:"PRIME POLICE Discord applications",release:"transfer-form-validation-origin-security-2026-10-28c",configured:{discord:Boolean(BOT_TOKEN),database:Boolean(SUPABASE_URL&&SERVICE_KEY),public_key:Boolean(DISCORD_PUBLIC_KEY)},application_id:APPLICATION_ID,guild_id:GUILD_ID,commands:["publicar_postulaciones","postulacion"],message:DISCORD_PUBLIC_KEY?"Endpoint disponible.":"Falta configurar DISCORD_PUBLIC_KEY en los secretos de Supabase."});
  if(req.method!=="POST")return json({error:"Method not allowed"},405);
  const body=await req.text();if(!await validSignature(req,body))return json({error:"Invalid Discord signature or DISCORD_PUBLIC_KEY not configured"},401);
  let i:any;try{i=JSON.parse(body)}catch{return json({error:"Invalid JSON"},400)}
