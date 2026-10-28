@@ -84,32 +84,24 @@ async function processTransferSubmit(i:any,userId:string,username:string,a:any){
 async function processRankRequest(i:any,userId:string,username:string,a:any){
  const characterName=String(a.character_name||"").trim().slice(0,100);
  const plate=String(a.plate||"").trim().slice(0,30);
- const requestedRank=String(a.requested_rank||"").trim().slice(0,100);
  const approvedBy=String(a.approved_by||"").replace(/@/g,"").trim().slice(0,100);
  if(!characterName||!plate||!approvedBy){await editInteractionReply(i,"Completa nombre IC, placa y nombre de quien aprobó la entrevista.");return;}
  const member=await discord("/guilds/"+GUILD_ID+"/members/"+encodeURIComponent(userId)) as any;
  const roles:string[]=member?.roles||[];
- if((!roles.includes(PRESELECTION_ROLE_ID)&&!roles.includes(POLICE_ROLE_ID))||roles.includes(CIC_ROLE_ID)||roles.includes(EXPELLED_ROLE_ID)){await editInteractionReply(i,"Solo las personas con rol Preselección o Policía pueden solicitar rango tras su entrevista IC.");return;}
- const configured=await db("police_rank_roles?select=role_id,role_name");
- const ranks=configured||[];
- let rank:any=null;
- let rankName="";
- if(!ranks.length)rankName=POLICE_ONLY_RANK_LABEL;
- else if(!requestedRank){await editInteractionReply(i,"UCOP ya configuró rangos. Indica el rango solicitado en el formulario.");return;}
- else{const normalizedRequest=normalizeRankName(requestedRank);rank=ranks.find((row:any)=>normalizeRankName(row.role_name)===normalizedRequest||String(row.role_id||"")===requestedRank);if(!rank){const names=ranks.map((row:any)=>String(row.role_name||"")).filter(Boolean);await editInteractionReply(i,names.length?"No encontré ese rango. Copia uno de estos nombres tal como aparece en la web: "+names.slice(0,20).join(", ")+(names.length>20?"…":""):"UCOP todavía no ha configurado rangos en la web.");return;}rankName=String(rank.role_name);}
+ if((!roles.includes(PRESELECTION_ROLE_ID)&&!roles.includes(POLICE_ROLE_ID))||roles.includes(CIC_ROLE_ID)||roles.includes(EXPELLED_ROLE_ID)){await editInteractionReply(i,"Solo las personas con rol Preselección o Policía pueden solicitar el ingreso tras su entrevista IC.");return;}
+ const rankName=POLICE_ONLY_RANK_LABEL;
  const pending=await db("police_rank_requests?select=id&discord_user_id=eq."+encodeURIComponent(userId)+"&status=eq.pending&limit=1");
- if(pending?.length){await editInteractionReply(i,"Ya tienes una solicitud de rango pendiente de revisión por UCOP.");return;}
+ if(pending?.length){await editInteractionReply(i,"Ya tienes una solicitud de ingreso pendiente de revisión por UCOP.");return;}
  const rows=await db("police_rank_requests",{method:"POST",body:JSON.stringify({discord_user_id:userId,discord_username:username,character_name:characterName,plate,requested_rank_name:rankName,approved_by_name:approvedBy})});
  const request=rows?.[0];
  if(!request?.id)throw Error("Rank request was not stored");
- await editInteractionReply(i,"Solicitud de rango enviada a UCOP para revisión. El equipo comprobará la aprobación de tu entrevista IC.");
+ await editInteractionReply(i,"Solicitud de ingreso enviada en privado a UCOP. Al aprobarla desde la web se asignará únicamente el rol Policía.");
 }
 const modalInput=(id:string,placeholder:string,required=true,style=2,maxLength=style===1?100:4000)=>({type:4,custom_id:id,style,...(placeholder?{placeholder}:{}),...(required?{min_length:1}:{}),max_length:maxLength,required});
-function rankRequestModal(){return response(9,{custom_id:"prime_rank_request_submit",title:"Solicitar rango · UCOP",components:[
+function rankRequestModal(){return response(9,{custom_id:"prime_rank_request_submit",title:"Nuevo ingreso · UCOP",components:[
  {type:10,content:"⚠️ Este formulario se enviará a UCOP. No compartas contraseñas ni información confidencial. Tu usuario e ID de Discord se registran automáticamente."},
  {type:18,label:"Nombre IC",component:modalInput("character_name","Nombre de tu personaje.",true,1)},
  {type:18,label:"Número de placa",component:modalInput("plate","Número de placa policial.",true,1,30)},
- {type:18,label:"Rango solicitado (opcional por ahora)",description:"Si aún no hay rangos configurados, se solicitará solo el rol Policía.",component:modalInput("requested_rank","Se ignorará mientras no haya rangos configurados.",false,1)},
  {type:18,label:"Aprobado por (sin @)",description:"Indica el nombre de quien aprobó tu entrevista IC.",component:modalInput("approved_by","Escribe el nombre, sin mencionar a nadie.",true,1)}
 ]})}
 function modal(){return response(9,{custom_id:"prime_application_submit",title:"Postulación · PRIME POLICE",components:[
@@ -137,7 +129,7 @@ async function handle(i:any){
    EdgeRuntime.waitUntil((async()=>{
     try{
      const applicationPanel={embeds:[{title:"📝 Preselección de ingreso · PRIME POLICE",description:"Completa la postulación para que **UCOP** revise tu solicitud. Cada persona dispone de un máximo de **3 intentos**.\n\nPulsa **Presentar postulación** para responder en privado. RRHH UCOP revisará tu escrito desde la web y te enviará el resultado por privado.\n\nSi te aprueban, recibirás el rol **Preselección** y UCOP coordinará contigo una **entrevista IC**. Después podrás solicitar el rol de Policía y tu rango desde <#"+RANK_REQUEST_CHANNEL_ID+">.",color:14264415,footer:{text:"PRIME POLICE · Preselección UCOP"}}],components:[{type:1,components:[{type:2,style:1,label:"Presentar postulación",custom_id:"prime_apply"}]}]};
-     const rankPanel={embeds:[{title:"📈 Solicitud de rango · UCOP",description:"Este formulario es para personas con rol **Preselección o Policía** que ya aprobaron su **entrevista IC**.\n\nCompleta el formulario. El acuse y las respuestas del formulario son privados: solo los verá quien lo envía. UCOP revisará la solicitud desde la web. Si aún no hay rangos configurados, se podrá aprobar solo el rol de **Policía** y añadir el rango más adelante.",color:14264415,footer:{text:"PRIME POLICE · Solicitudes UCOP · Respuesta privada"}}],components:[{type:1,components:[{type:2,style:2,label:"Solicitar rango",custom_id:"prime_rank_request"}]}]};
+     const rankPanel={embeds:[{title:"📝 Formulario de nuevo ingreso · UCOP",description:"Este formulario es para personas con rol **Preselección o Policía** que ya aprobaron su **entrevista IC**.\n\nCompleta el formulario. El acuse y las respuestas del formulario son privados: solo los verá quien lo envía. UCOP revisará la solicitud desde la web. Al aprobarla, recibirás únicamente el rol **Policía**. Los ascensos y descensos se gestionan después desde la web.",color:14264415,footer:{text:"PRIME POLICE · Solicitudes UCOP · Respuesta privada"}}],components:[{type:1,components:[{type:2,style:2,label:"Ingresar datos",custom_id:"prime_rank_request"}]}]};
      const transferPanel={embeds:[{title:"🏛️ UCOP · Solicitud de traslado",description:"¿Perteneces a la Policía de otra **facción o ciudad** y quieres incorporarte a PRIME POLICE?\n\nPulsa el botón para completar el formulario privado. Tus datos solo estarán disponibles para el personal autorizado de UCOP en el panel administrativo.\n\nSi aceptan la solicitud, recibirás el rol **Traslado** para coordinar una **entrevista IC** con UCOP. El rol no implica la incorporación automática como Policía.",color:14264415,footer:{text:"PRIME POLICE · RR. HH. · Solicitudes privadas"}}],components:[{type:1,components:[{type:2,style:1,label:"Solicitar traslado",custom_id:"prime_transfer"}]}]};
      await publishOrUpdatePanel(APPLICATION_ANNOUNCEMENTS_CHANNEL_ID,"prime_apply",applicationPanel);
      await publishOrUpdatePanel(RANK_REQUEST_CHANNEL_ID,"prime_rank_request",rankPanel);
