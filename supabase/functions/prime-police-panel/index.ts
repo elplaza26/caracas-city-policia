@@ -394,6 +394,7 @@ async function decide(req: Request) {
   let app: any;
   let finalApp: any;
   let preselectionSynced = true;
+  let isNewDecision = false;
   try {
     const rows = await db(
       "police_applications?select=*&id=eq." + encodeURIComponent(id) + "&limit=1",
@@ -402,7 +403,7 @@ async function decide(req: Request) {
     if (!app) return json({ error: "No se encontró esa candidatura." }, 404);
 
     const retryRole = action === "accept" && app.status === "accepted" && !app.role_assigned_at;
-    const isNewDecision = app.status === "pending";
+    isNewDecision = app.status === "pending";
     if (action === "reject" && app.status !== "pending") {
       return json({ error: "Esta candidatura ya fue revisada y no se ha cambiado." }, 409);
     }
@@ -558,7 +559,7 @@ async function routePanel(req: Request): Promise<Response> {
       commands_status: "managed_separately",
       configured: { discord: Boolean(BOT_TOKEN), database: Boolean(SUPABASE_URL && SERVICE_KEY), discord_oauth: Boolean(DISCORD_OAUTH_CLIENT_SECRET) },
 
-      version: "connection-resilience-2026-10-28j",
+      version: "decision-confirmation-2026-10-28k",
     });
   }
   return json({ error: "Método no permitido." }, 405);
