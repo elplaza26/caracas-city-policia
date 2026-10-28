@@ -1,20 +1,41 @@
 # PRIME POLICE · Panel administrativo
 
-Panel web para revisar las postulaciones de PRIME POLICE. La interfaz muestra las candidaturas pendientes, aceptadas y rechazadas en secciones separadas.
+Panel privado de gestión de personal de PRIME POLICE, orientado a UCOP y RR. HH. La interfaz está publicada en GitHub Pages y usa Supabase Edge Functions para validar el acceso, guardar los registros y sincronizar acciones autorizadas con Discord.
 
-## Componentes
+## Módulos
 
-- `index.html`: interfaz administrativa adaptada a PRIME POLICE.
-- Supabase Edge Function `prime-police-panel`: acceso temporal, lectura de solicitudes y decisiones.
-- Supabase Edge Function `prime-police-discord`: comandos e interacciones del bot.
-- `supabase/migrations/20261026160000_prime_police_application_answers.sql`: campo JSON para guardar las respuestas del formulario.
+- **Postulaciones:** revisión de respuestas, aceptación o rechazo y asignación del rol de Policía al aceptar.
+- **Solicitudes de rango:** revisión de las solicitudes enviadas por el personal desde Discord.
+- **Personal UCOP:** fichas con nombre IC/OOC, placa, usuario de Discord, rango, unidad y estado; búsqueda, filtros y expediente individual.
+- **Ascensos y descensos:** configuración de la escala a partir de roles de Discord, cambios de rango, motivo e historial de auditoría.
+- **Sanciones:** registro de Warn y Strike, motivo y evidencia, publicación en sus canales, sincronización de roles e historial. El tercer Strike asigna Expulsado y retira Policía; no expulsa del servidor.
 
-## Publicación web
+## Acceso y datos
 
-- URL del panel: https://primepolicerp.github.io/PRIME-POLICE/
-- GitHub Pages se publica mediante el workflow `.github/workflows/pages.yml`.
-2. Configurar la **Public Key** de la aplicación Discord como `DISCORD_PUBLIC_KEY` en los secretos de la función Supabase (o añadirla al código del endpoint).
-3. Confirmar que la URL de interacciones en Discord Developer Portal apunta a `https://ngkmylqsdeevdtrjrgfn.supabase.co/functions/v1/prime-police-discord`.
-4. Verificar que el bot tiene permiso para enviar mensajes y que su rol está por encima del rol de Policía para poder asignarlo al aceptar.
+El inicio de sesión se hace con Discord. Solo pueden entrar integrantes que tengan al menos uno de los roles gestores configurados en `prime-police-panel/index.ts` y `prime-police-panel/hr.ts`. Las funciones validan la sesión y los roles en el servidor antes de cada operación. Las tablas usan RLS y las funciones acceden a ellas con la clave privada de servicio.
 
-No publiques nunca el `DISCORD_BOT_TOKEN` en GitHub ni en el navegador.
+No guardes tokens de Discord, claves de Supabase ni la clave `service_role` en `index.html`, GitHub o mensajes. Configúralos en los secretos de Supabase:
+
+- `DISCORD_BOT_TOKEN`
+- `DISCORD_OAUTH_CLIENT_SECRET`
+
+Supabase proporciona `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` a las Edge Functions. El identificador de aplicación Discord, roles, canales y proyecto de Supabase están configurados en el código; revísalos antes de reutilizar este repositorio en otro servidor.
+
+## Despliegue
+
+- **Panel:** <https://primepolicerp.github.io/PRIME-POLICE/>
+- **Proyecto Supabase:** `ngkmylqsdeevdtrjrgfn`
+- **Interacciones del bot:** `https://ngkmylqsdeevdtrjrgfn.supabase.co/functions/v1/prime-police-discord`
+- **Retorno OAuth de Discord:** `https://ngkmylqsdeevdtrjrgfn.supabase.co/functions/v1/prime-police-panel?panel=oauth-callback`
+
+GitHub Pages publica la rama `main` con `.github/workflows/pages.yml`. El backend está formado por `prime-police-panel` (panel y RR. HH.) y `prime-police-discord` (comandos e interacciones). Las tablas y cambios de esquema están versionados en `supabase/migrations/`; antes de desplegar una instalación nueva, aplica todas las migraciones en orden en el proyecto Supabase.
+
+Los rangos se configuran dentro del panel: abre **Ascensos y descensos**, añade los roles de rango del servidor en el orden jerárquico y guarda la escala. No importes todos los roles sin revisar cuáles pertenecen realmente a la escala policial.
+
+## Archivos principales
+
+- `index.html`: interfaz del panel.
+- `supabase/functions/prime-police-panel/index.ts`: acceso, postulaciones, decisiones y sanciones.
+- `supabase/functions/prime-police-panel/hr.ts`: personal, solicitudes de rango, jerarquía e historial.
+- `supabase/functions/prime-police-discord/index.ts`: comandos e interacciones de Discord.
+- `supabase/migrations/`: esquema de postulaciones, personal, rangos, solicitudes e historial.
