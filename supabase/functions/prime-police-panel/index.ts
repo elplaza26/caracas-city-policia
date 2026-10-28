@@ -94,7 +94,8 @@ async function postAuditLog(title: string, color: number, fields: Array<{ name: 
 async function ensureSlashCommands() {
   const path = "/applications/" + APPLICATION_ID + "/guilds/" + GUILD_ID + "/commands";
   const desired = [
-    { name: "postulacion", description: "Información sobre cómo postularte a PRIME POLICE" },
+    { name: "postulacion", description: "Abrir el formulario privado para postularte a PRIME POLICE" },
+    { name: "traslado", description: "Abrir el formulario privado de traslado a PRIME POLICE" },
     { name: "publicar_postulaciones", description: "Actualizar paneles de postulación y rango UCOP" },
   ];
   const existing = await discord(path) as any[];
