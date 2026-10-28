@@ -544,6 +544,26 @@ async function changeRank(req: Request) {
 }
 
 export async function handleHr(req: Request, action: string): Promise<Response | null> {
+  if (action === "nickname-sync" && req.method === "POST") {
+    const auth=await allowed(req);if(auth.error)return auth.error;
+    let body:any;try{body=await req.json();}catch{return json({error:"Solicitud inválida."},400);}
+    const id=String(body?.discord_user_id||"");if(!validDiscordId(id))return json({error:"Usuario inválido."},400);
+    try{
+      const profiles=await db("police_personnel?select=full_name,plate&discord_user_id=eq."+enc(id)+"&limit=1");
+      const p=profiles?.[0];if(!p?.full_name||!p?.plate)return json({error:"Completa el nombre IC y la placa en la ficha de Personal."},409);
+      const member=await discord("/guilds/"+GUILD_ID+"/members/"+enc(id)) as any;
+      if(!(member.roles||[]).includes(POLICE_ROLE_ID))return json({error:"El agente todavía no tiene el rol Policía."},409);
+      await updatePersonnelNickname(id,p.full_name,p.plate,"PRIME POLICE: resincronización de nombre y placa por "+auth.userId);
+      return json({ok:true,message:"Apodo actualizado en Discord: "+personnelNickname(p.full_name,p.plate)});
+    }catch(error){
+      console.error("Nickname sync:",String(error));
+      if(String(error).includes("Discord API 403")){
+        try{const guild=await discord("/guilds/"+GUILD_ID) as any;if(String(guild.owner_id)===id)return json({error:"Discord no permite que un bot cambie el apodo del propietario del servidor. En esa cuenta debes poner el nombre y la placa manualmente."},409);}catch{/* preserve permission explanation */}
+        return json({error:"Discord bloqueó el apodo. Activa Gestionar apodos para el bot y coloca su rol por encima del rol más alto del agente."},409);
+      }
+      return json({error:"No se pudo actualizar el apodo. Comprueba que el agente sigue en el servidor."},502);
+    }
+  }
   if (action === "shifts" && req.method === "GET") {
     const auth = await allowed(req); if (auth.error) return auth.error;
     try { const offset=Number(new URL(req.url).searchParams.get("offset")||0); if(!Number.isSafeInteger(offset)||offset<0)return json({error:"Página inválida."},400); const shifts=await db("police_duty_shifts?select=*&order=started_at.desc,id.desc&limit=1000&offset="+offset); return json({ ok: true, shifts, next_offset:shifts.length===1000?offset+1000:null }); }

@@ -277,6 +277,10 @@ function renderRankRequests() {
     }else{
       const result=document.createElement("span");result.className="muted";result.textContent=item.status==="accepted"?(policeOnly?"Rol Policía aplicado; asigna rama y rango desde Personal.":"El rango solicitado fue aplicado en Discord y en la ficha UCOP."):"Solicitud revisada por UCOP.";actions.append(result);
     }
+    if(item.status==="accepted"){
+      const sync=document.createElement("button"),status=document.createElement("span");sync.type="button";sync.className="btn";sync.textContent="Sincronizar nombre y placa";status.className="muted";status.setAttribute("role","status");
+      sync.addEventListener("click",async()=>{sync.disabled=true;status.textContent="Actualizando apodo en Discord…";try{const r=await request("nickname-sync",{method:"POST",body:{discord_user_id:item.discord_user_id}});status.textContent=r.message;}catch(e){status.textContent=e.message;}finally{sync.disabled=false;}});actions.append(sync,status);
+    }
     card.append(head,grid,actions);list.append(card);
   });
 }
