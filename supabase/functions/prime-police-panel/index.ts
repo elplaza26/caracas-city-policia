@@ -2,7 +2,6 @@ import { handleHr } from "./hr.ts";
 
 const GUILD_ID = "1539970134469378068";
 const LEGACY_APPLICATION_CHANNEL_ID = "1539970136683847857";
-const RESULTS_CHANNEL_ID = "1564350390294552696";
 const RANK_AUDIT_CHANNEL_ID = "1539970137246142604";
 const POLICE_ROLE_ID = "1539970134482092038";
 const PRESELECTION_ROLE_ID = "1564685481457877012";
@@ -14,13 +13,18 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const DISCORD_OAUTH_CALLBACK = SUPABASE_URL.replace(/\/$/, "") + "/functions/v1/prime-police-panel?panel=oauth-callback";
 const PANEL_SITE_URL = "https://primepolicerp.github.io/PRIME-POLICE/";
+const PANEL_ORIGIN = "https://primepolicerp.github.io";
 const PANEL_SESSION_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": PANEL_ORIGIN,
   "Access-Control-Allow-Headers": "authorization, apikey, content-type",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Vary": "Origin",
+  "Cache-Control": "no-store",
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+  "Referrer-Policy": "no-referrer",
 };
 const encoder = new TextEncoder();
 const json = (data: unknown, status = 200) =>
@@ -60,6 +64,18 @@ const discord = async (path: string, init: RequestInit = {}) => {
   if (!res.ok) throw new Error("Discord API " + res.status + ": " + JSON.stringify(body));
   return body;
 };
+
+async function sendPrivateDiscordMessage(userId: string, payload: Record<string, unknown>) {
+  const channel = await discord("/users/@me/channels", {
+    method: "POST",
+    body: JSON.stringify({ recipient_id: userId }),
+  }) as any;
+  if (!channel?.id) throw new Error("Discord did not create a private channel");
+  return await discord("/channels/" + encodeURIComponent(String(channel.id)) + "/messages", {
+    method: "POST",
+    body: JSON.stringify({ ...payload, allowed_mentions: { parse: [] } }),
+  });
+}
 
 async function postAuditLog(title: string, color: number, fields: Array<{ name: string; value: string }>) {
   try {
@@ -355,12 +371,12 @@ async function decideTransfer(req: Request) {
     try {
       const accepted = action === "accept";
       const description = accepted
-        ? "UCOP ha aceptado tu solicitud de traslado y se te ha asignado el rol <@&" + TRANSFER_ROLE_ID + ">. Contacta con UCOP para coordinar tu entrevista IC."
-        : "UCOP ha revisado tu solicitud de traslado y, por el momento, no ha sido aprobada." + (reason ? " Motivo: " + reason : "");
-      await discord("/channels/" + RESULTS_CHANNEL_ID + "/messages", { method: "POST", body: JSON.stringify({ content: "<@" + String(item.discord_user_id) + ">", embeds: [{ title: accepted ? "🚔 Traslado aceptado · PRIME POLICE" : "📋 Resultado de solicitud de traslado", description, color: accepted ? 0x45b879 : 0xd5ad5a }], allowed_mentions: { parse: [], users: [String(item.discord_user_id)], roles: accepted ? [TRANSFER_ROLE_ID] : [] } }) });
+        ? "RRHH UCOP aceptó tu solicitud y te asignó el rol Traslado. Contacta con UCOP para coordinar tu entrevista IC."
+        : "RRHH UCOP revisó tu solicitud de traslado y, por el momento, no fue aprobada." + (reason ? "\nMotivo: " + reason : "");
+      await sendPrivateDiscordMessage(String(item.discord_user_id), { embeds: [{ title: accepted ? "🚔 Traslado aceptado · PRIME POLICE" : "📋 Resultado de solicitud de traslado", description, color: accepted ? 0x45b879 : 0xd5ad5a }] });
       notified = true;
-    } catch (e) { console.error("Transfer result notification failed:", String(e)); }
-    return json({ ok: true, status: updated[0].status, role_assigned: action === "accept", results_notified: notified, warning: notified ? undefined : "La decisión se guardó, pero no se pudo enviar el resultado en Discord." });
+    } catch (e) { console.error("Private transfer result DM failed:", String(e)); }
+    return json({ ok: true, status: updated[0].status, role_assigned: action === "accept", results_notified: notified, warning: notified ? undefined : "La decisión se guardó, pero no se pudo enviar el resultado por privado. Comprueba que la persona permita mensajes directos." });
   } catch (e) {
     console.error("Transfer decision error:", String(e));
     return json({ error: "No se pudo guardar la decisión." }, 500);
@@ -483,17 +499,8 @@ async function decide(req: Request) {
   // Application content stays in the protected database and panel; do not publish per-app messages to Discord.
   const oldMessageId = String(app.discord_message_id ?? "");
   if (oldMessageId) {
-    const statusText = action === "accept" ? "✅ Aceptada · rol de Preselección asignado" : "❌ No seleccionada";
-    const content = "📋 **Postulación revisada**\n" +
-      "**Candidato:** <@" + String(app.discord_user_id) + ">\n" +
-      "**Estado:** " + statusText + "\n" +
-      "**Revisado por:** <@" + reviewerId + ">\n" +
-      "**Intento:** " + String(app.attempt_number ?? 1) + "/3\n" +
-      "**Solicitud:** " + id;
     try {
-      await discord("/channels/" + LEGACY_APPLICATION_CHANNEL_ID + "/messages/" + encodeURIComponent(oldMessageId), {
-        method: "PATCH", body: JSON.stringify({ content, embeds: [], components: [] }),
-      });
+        await discord("/channels/" + LEGACY_APPLICATION_CHANNEL_ID + "/messages/" + encodeURIComponent(oldMessageId), { method: "DELETE" });
     } catch (error) { console.error("Could not redact old application message:", String(error)); }
   }
 
@@ -503,22 +510,17 @@ async function decide(req: Request) {
     const remaining = Math.max(0, 3 - attempt);
     const accepted = action === "accept";
     const description = accepted
-      ? "¡Enhorabuena! UCOP ha aceptado tu postulación y se te ha asignado el rol <@&" + PRESELECTION_ROLE_ID + ">. Con ese rol, UCOP coordinará contigo una entrevista IC. Después de aprobarla, usa «Solicitar rango» en <#1539970135375478859>; al aprobar UCOP tu solicitud, se te asignarán el rol de Policía y el rango."
+      ? "RRHH UCOP aceptó tu postulación y te asignó el rol Preselección. UCOP coordinará contigo una entrevista IC. Después de aprobarla, podrás solicitar el rol Policía y el rango correspondiente."
       : remaining > 0
         ? "Gracias por tu tiempo y por querer formar parte de PRIME POLICE. En esta ocasión no has sido seleccionado. No te desanimes: puedes prepararte y volver a intentarlo. Te quedan **" + remaining + " de 3 intentos**."
         : "Gracias por tu esfuerzo y por postularte a PRIME POLICE. En esta ocasión no has sido seleccionado. Has utilizado tus **3 de 3 intentos**, así que no podrás enviar otra postulación. Te animamos a seguir participando en la comunidad y te deseamos lo mejor.";
     try {
-      await discord("/channels/" + RESULTS_CHANNEL_ID + "/messages", {
-        method: "POST",
-        body: JSON.stringify({
-          content: "<@" + String(app.discord_user_id) + ">",
-          embeds: [{ title: accepted ? "🎉 Resultado de postulación · Aceptada" : "📋 Resultado de postulación · PRIME POLICE", description, color: accepted ? 0x45b879 : 0xd5ad5a, footer: { text: "PRIME POLICE · Reclutamiento · Intento " + attempt + "/3" } }],
-          allowed_mentions: { parse: [], users: [String(app.discord_user_id)], roles: accepted ? [PRESELECTION_ROLE_ID] : [] },
-        }),
+      await sendPrivateDiscordMessage(String(app.discord_user_id), {
+        embeds: [{ title: accepted ? "🎉 Resultado de postulación · Aceptada" : "📋 Resultado de postulación · PRIME POLICE", description, color: accepted ? 0x45b879 : 0xd5ad5a, footer: { text: "RRHH UCOP · Intento " + attempt + "/3 · Mensaje privado" } }],
       });
       resultsNotified = true;
     } catch (error) {
-      console.error("Could not publish application result:", String(error));
+      console.error("Could not DM application result:", String(error));
     }
   }
   return json({
@@ -528,13 +530,15 @@ async function decide(req: Request) {
     results_notified: resultsNotified,
     warning: !preselectionSynced
       ? "La candidatura se aceptó, pero no se guardó en la base de preseleccionados. Avísale a un administrador para revisar el registro."
-      : resultsNotified ? undefined : "La decisión se guardó, pero no se pudo publicar el resultado en el canal correspondiente.",
+      : resultsNotified ? undefined : "La decisión se guardó, pero no se pudo enviar por privado. Comprueba que la persona permita mensajes directos.",
   });
 }
 
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS_HEADERS });
   const action = new URL(req.url).searchParams.get("panel");
+  const origin = req.headers.get("origin");
+  if (action !== "oauth-callback" && origin && origin !== PANEL_ORIGIN) return json({ error: "Origen no autorizado." }, 403);
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS_HEADERS });
   if (action === "oauth-start" && req.method === "GET") return startDiscordOAuth();
   if (action === "oauth-callback" && req.method === "GET") return await finishDiscordOAuth(req);
   if (action === "login" && req.method === "POST") return await login(req);
@@ -567,7 +571,7 @@ Deno.serve(async (req: Request) => {
       commands_registered: commandsRegistered,
       configured: { discord: Boolean(BOT_TOKEN), database: Boolean(SUPABASE_URL && SERVICE_KEY), discord_oauth: Boolean(DISCORD_OAUTH_CLIENT_SECRET) },
       warning: commandsRegistered ? undefined : "La API está activa, pero no se pudieron actualizar los comandos de Discord.",
-      version: "private-transfer-applications-2026-10-28a",
+      version: "private-application-and-transfer-results-2026-10-28d",
     });
   }
   return json({ error: "Método no permitido." }, 405);
