@@ -70,13 +70,13 @@ async function sendPrivateDiscordMessage(userId: string, payload: Record<string,
   });
 }
 
-async function postAuditLog(title: string, color: number, fields: Array<{ name: string; value: string }>) {
+async function postAuditLog(title: string, color: number, fields: Array<{ name: string; value: string; inline?: boolean }>, footer = "PRIME POLICE · Auditoría UCOP") {
   await writeAudit(title,fields);
   try {
     await discord("/channels/" + RANK_AUDIT_CHANNEL_ID + "/messages", {
       method: "POST",
       body: JSON.stringify({
-        embeds: [{ title, color, fields: fields.map((field) => ({ name: field.name.slice(0, 256), value: field.value.slice(0, 1024), inline: true })), timestamp: new Date().toISOString(), footer: { text: "PRIME POLICE · Auditoría UCOP" } }],
+        embeds: [{ title, color, fields: fields.map((field) => ({ name: field.name.slice(0, 256), value: field.value.slice(0, 1024), inline: field.inline ?? true })), timestamp: new Date().toISOString(), footer: { text: footer } }],
         allowed_mentions: { parse: [] },
       }),
     });
@@ -477,15 +477,23 @@ async function decide(req: Request) {
       reviewerName = String(reviewer.nick || reviewer.user?.global_name || reviewer.user?.username || reviewerId);
     } catch (e) { console.error("Could not resolve application reviewer name:", String(e)); }
     await postAuditLog(
-      action === "accept" ? "✅ Postulación aceptada" : "❌ Postulación rechazada",
-      action === "accept" ? 0x45b879 : 0xe87979,
-      [
-        { name: "Postulante", value: String(app.full_name || app.discord_username || "Sin nombre") },
-        { name: "Discord ID", value: String(app.discord_user_id) },
-        { name: "Decisión por", value: reviewerName },
-        { name: "Intento", value: String(app.attempt_number ?? 1) + "/3" },
-        ...(reason ? [{ name: "Motivo", value: reason }] : []),
+      action === 'accept' ? '🛡️ PRIME POLICE · Preselección aprobada' : '❌ Postulación rechazada',
+      action === 'accept' ? 0x4d98c9 : 0xe87979,
+      action === 'accept' ? [
+        {name:'CUENTA DE DISCORD',value:'<@'+app.discord_user_id+'> · '+String(app.discord_username||''),inline:false},
+        {name:'Nombre del personaje',value:String(app.full_name||'No indicado')},
+        {name:'Asignación',value:'<@&'+PRESELECTION_ROLE_ID+'>'},
+        {name:'Revisada por',value:'<@'+reviewerId+'>\n'+reviewerName},
+        {name:'Siguiente paso',value:'Entrevista IC con UCOP · Intento '+String(app.attempt_number||1)+' de 3',inline:false},
+        ...(reason?[{name:'Observaciones',value:reason,inline:false}]:[])
+      ] : [
+        {name:'Postulante',value:String(app.full_name||app.discord_username||'Sin nombre')},
+        {name:'Discord ID',value:String(app.discord_user_id)},
+        {name:'Decisión por',value:reviewerName},
+        {name:'Intento',value:String(app.attempt_number||1)+'/3'},
+        ...(reason?[{name:'Motivo',value:reason}]:[])
       ],
+      action==='accept'?'PRIME POLICE · RR. HH. · Selección y entrevistas':'PRIME POLICE · Auditoría UCOP'
     );
   } catch (e) {
     console.error("Panel decision database error:", String(e));
@@ -559,7 +567,7 @@ async function routePanel(req: Request): Promise<Response> {
       commands_status: "managed_separately",
       configured: { discord: Boolean(BOT_TOKEN), database: Boolean(SUPABASE_URL && SERVICE_KEY), discord_oauth: Boolean(DISCORD_OAUTH_CLIENT_SECRET) },
 
-      version: "decision-confirmation-2026-10-28k",
+      version: "approval-embeds-2026-10-28l",
     });
   }
   return json({ error: "Método no permitido." }, 405);

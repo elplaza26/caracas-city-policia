@@ -83,13 +83,13 @@ async function db(path: string, init: RequestInit = {}) {
 
 const discord = discordRequest;
 
-async function postRankAuditLog(title: string, color: number, fields: Array<{ name: string; value: string }>) {
+async function postRankAuditLog(title: string, color: number, fields: Array<{ name: string; value: string; inline?: boolean }>, footer = "PRIME POLICE · Auditoría UCOP") {
   await writeAudit(title,fields);
   try {
     await discord("/channels/" + RANK_AUDIT_CHANNEL_ID + "/messages", {
       method: "POST",
       body: JSON.stringify({
-        embeds: [{ title, color, fields: fields.map((field) => ({ name: field.name.slice(0, 256), value: field.value.slice(0, 1024), inline: true })), timestamp: new Date().toISOString(), footer: { text: "PRIME POLICE · Auditoría UCOP" } }],
+        embeds: [{ title, color, fields: fields.map((field) => ({ name: field.name.slice(0, 256), value: field.value.slice(0, 1024), inline: field.inline ?? true })), timestamp: new Date().toISOString(), footer: { text: footer } }],
         allowed_mentions: { parse: [] },
       }),
     });
@@ -423,17 +423,19 @@ async function reviewRankRequest(req: Request) {
       } catch (error) { console.error("Could not update rank request message:", String(error)); }
     }
     await postRankAuditLog(
-      decision === "accept" ? "✅ Solicitud aprobada por UCOP" : "❌ Solicitud rechazada por UCOP",
-      decision === "accept" ? 0x45b879 : 0xe87979,
+      decision==='accept'?'🛡️ PRIME POLICE · Ingreso validado':'❌ Solicitud de ingreso rechazada',
+      decision==='accept'?0x4d98c9:0xe87979,
       [
-        { name: "Persona", value: String(rankRequest.character_name || "Sin nombre") },
-        { name: "Discord ID", value: String(rankRequest.discord_user_id) },
-        { name: "Placa", value: String(rankRequest.plate || "Sin placa") },
-        { name: "Rango solicitado", value: String(rankRequest.requested_rank_name || "Sin rango") },
-        { name: decision === "accept" ? "Aprobó" : "Rechazó", value: reviewerName },
-        { name: "Entrevistador indicado", value: String(rankRequest.approved_by_name || "No indicado") },
-        ...(String(body?.reason ?? "").trim() ? [{ name: "Motivo", value: String(body.reason).trim().slice(0, 1000) }] : []),
+        {name:'CUENTA DE DISCORD',value:'<@'+rankRequest.discord_user_id+'> · '+String(rankRequest.discord_username||''),inline:false},
+        {name:'Nombre IC',value:String(rankRequest.character_name||'No indicado')},
+        {name:'Usuario de Steam',value:String(rankRequest.steam_username||'No indicado en la solicitud')},
+        {name:'Placa',value:String(rankRequest.plate||'Sin placa')},
+        ...(decision==='accept'?[{name:'Rol de ingreso',value:'<@&'+POLICE_ROLE_ID+'>'}]:[]),
+        {name:'Entrevista IC aprobada por',value:String(rankRequest.approved_by_name||'No indicado')},
+        {name:'Validación administrativa',value:'<@'+auth.userId+'>\n'+reviewerName},
+        ...(String(body?.reason||'').trim()?[{name:'Observaciones',value:String(body.reason).trim().slice(0,1000),inline:false}]:[])
       ],
+      'PRIME POLICE · RR. HH. · Alta de personal'
     );
     const policeOnlyRequest = decision === "accept" && rankRequest.requested_rank_name === POLICE_ONLY_RANK_LABEL;
     return json({ ok: true, warning: nicknameWarning || undefined, message: decision !== "accept" ? "Solicitud rechazada." : policeOnlyRequest ? "Ingreso aprobado; rol Policía asignado. Asigna rama y rango desde Personal." : "Solicitud aprobada; rol de Policía y rango asignados." });
