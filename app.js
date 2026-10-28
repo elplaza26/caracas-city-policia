@@ -42,22 +42,30 @@ function showApp() {
   $("appView").classList.remove("hidden");
 
 }
-async function request(action, options) {
-  options = options || {};
-  const headers = {"Content-Type":"application/json"};
-  if (token && action !== "login") headers.Authorization = "Bearer " + token;
-  const response = await fetch(API_BASE + "?panel=" + encodeURIComponent(action)+(options.query?"&"+new URLSearchParams(options.query):""), {
-    method: options.method || (["data","me","personnel","preselections","rank-config","rank-history","rank-requests","sanctions","transfers","shifts","rank-authorizations"].includes(action) ? "GET" : "POST"),
-    headers,
-    body: options.body ? JSON.stringify(options.body) : undefined
-  });
-  const result = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    if (action !== "login" && (response.status === 401 || (response.status === 403 && /sesión|permiso|autorizado/i.test(result.error||"")))) showLogin();
-    throw new Error(result.error || ("Error HTTP " + response.status));
+const inFlightReads=new Map();
+async function request(action,options={}){
+ const method=options.method||(['data','me','personnel','preselections','rank-config','rank-history','rank-requests','sanctions','transfers','shifts','rank-authorizations'].includes(action)?'GET':'POST');
+ const sessionAtStart=token,key=JSON.stringify([action,options.query||{},sessionAtStart]);
+ if(method==='GET'&&inFlightReads.has(key))return inFlightReads.get(key);
+ const task=performApiRequest(action,options,method,sessionAtStart);if(method==='GET')inFlightReads.set(key,task);
+ try{return await task;}finally{if(method==='GET')inFlightReads.delete(key);}
+}
+async function performApiRequest(action,options,method,sessionAtStart){
+ const headers={'Content-Type':'application/json'};if(sessionAtStart&&action!=='login')headers.Authorization='Bearer '+sessionAtStart;
+ for(let attempt=0;attempt<(method==='GET'?2:1);attempt++){
+  let response;
+  try{response=await fetch(API_BASE+'?panel='+encodeURIComponent(action)+(options.query?'&'+new URLSearchParams(options.query):''),{method,headers,body:options.body?JSON.stringify(options.body):undefined,cache:'no-store',signal:AbortSignal.timeout(method==='GET'?18000:45000)});}
+  catch(error){if(method==='GET'&&attempt===0){await new Promise(r=>setTimeout(r,500));continue;}throw Error(method==='GET'?'La conexión tardó demasiado o se interrumpió. Tu sesión sigue abierta; prueba Actualizar.':'No se pudo confirmar el resultado de la operación. Actualiza el registro y los pendientes antes de repetirla.');}
+  const result=await response.json().catch(()=>({})),reference=response.headers.get('X-Request-ID');
+  if(!response.ok){
+   if(method==='GET'&&attempt===0&&[429,502,503,504].includes(response.status)){await new Promise(r=>setTimeout(r,600));continue;}
+   if(token===sessionAtStart&&action!=='login'&&(response.status===401||(response.status===403&&/sesión|permiso|autorizado/i.test(result.error||''))))showLogin();
+   const message=result.error||([502,503,504].includes(response.status)?'El servicio no pudo confirmar el resultado. Actualiza el registro antes de repetir.':'No se pudo completar la petición (HTTP '+response.status+').');
+   throw Error(message+(reference?' · Ref. '+reference.slice(0,8):''));
   }
   if(result.pending_approval)window.dispatchEvent(new Event('pending-change-created'));
   return result;
+ }
 }
 async function loadAccountProfile() {
   const fallbackAvatar = "https://cdn.discordapp.com/embed/avatars/0.png";
@@ -486,7 +494,7 @@ if (oauthCodeFromUrl || oauthErrorFromUrl) {
 }
 async function checkConnection() {
   try {
-    const response = await fetch(API_BASE);
+    const response = await fetch(API_BASE,{cache:'no-store',signal:AbortSignal.timeout(10000)});
     const result = await response.json();
     if (!response.ok || !result.ok) {
       $("connection").textContent = "● API sin verificar";
@@ -499,6 +507,8 @@ async function checkConnection() {
     } else if (result.configured && result.configured.discord_oauth === false) {
       $("connection").textContent = "● Falta OAuth de Discord";
       $("connection").style.color = "#ffcf7b";
+    } else if (result.commands_status==='managed_separately') {
+      $('connection').textContent='● API conectada';$('connection').style.color='#8de4bd';
     } else if (result.commands_registered) {
       $("connection").textContent = "● API y comandos listos";
       $("connection").style.color = "#8de4bd";

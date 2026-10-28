@@ -51,3 +51,7 @@ Las nuevas propuestas se revisan en Panel principal → Cambios pendientes de Di
 La migración `20261028194311_police_rank_authorizations.sql` añade las autorizaciones, reservas, auditoría y el resumen de horas por período. El historial horario se consulta por fechas y páginas de 50 registros. Los permisos de gestión se verifican de nuevo en cada operación; las consultas comparten una caché de roles de 10 segundos.
 
 La migración `20261028195820_police_all_changes_approval.sql` añade la bandeja general de cambios. La revisión comprueba el estado original de cada registro y bloquea propuestas obsoletas. Solo se admiten las operaciones enumeradas en `change-requests.ts`; nunca se ejecutan rutas arbitrarias del solicitante.
+
+## Conexión y confirmación de operaciones
+
+El panel comparte las consultas simultáneas a Discord, respeta sus respuestas de límite temporal y reintenta una vez las lecturas que fallen por conexión o errores del servicio. Los cambios no se repiten automáticamente tras un corte de red o un error incierto del servidor. La web conserva la sesión ante fallos temporales y muestra una referencia de petición para localizar el error. El chequeo público de conexión ya no registra ni consulta comandos de Discord en cada carga.

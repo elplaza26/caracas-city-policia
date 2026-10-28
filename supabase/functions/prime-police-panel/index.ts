@@ -1,3 +1,4 @@
+import { discordRequest, discordFailure } from "./discord-client.ts";
 import { interceptChanges } from "./change-requests.ts";
 import { writeAudit } from "./audit-events.ts";
 import { withOperationLock } from "./operation-lock.ts";
@@ -41,6 +42,7 @@ const db = async (path: string, init: RequestInit = {}) => {
   if (!SUPABASE_URL || !SERVICE_KEY) throw new Error("Server database credentials unavailable");
   const res = await fetch(SUPABASE_URL + "/rest/v1/" + path, {
     ...init,
+    signal:init.signal??AbortSignal.timeout(12000),
     headers: {
       apikey: SERVICE_KEY,
       Authorization: "Bearer " + SERVICE_KEY,
@@ -54,20 +56,7 @@ const db = async (path: string, init: RequestInit = {}) => {
   return body;
 };
 
-const discord = async (path: string, init: RequestInit = {}) => {
-  if (!BOT_TOKEN) throw new Error("Discord bot token is not configured");
-  const res = await fetch("https://discord.com/api/v10" + path, {
-    ...init,
-    headers: {
-      Authorization: "Bot " + BOT_TOKEN,
-      "Content-Type": "application/json",
-      ...(init.headers ?? {}),
-    },
-  });
-  const body = res.status === 204 ? null : await res.json().catch(() => null);
-  if (!res.ok) throw new Error("Discord API " + res.status + ": " + JSON.stringify(body));
-  return body;
-};
+const discord = discordRequest;
 
 async function sendPrivateDiscordMessage(userId: string, payload: Record<string, unknown>) {
   const channel = await discord("/users/@me/channels", {
@@ -561,24 +550,15 @@ async function routePanel(req: Request): Promise<Response> {
   if (hrResponse) return hrResponse;
   if (action) return json({ error: "Acción de panel no reconocida." }, 404);
   if (req.method === "GET") {
-    let commandsRegistered = false;
-    let commandError = "";
-    try {
-      await ensureSlashCommands();
-      commandsRegistered = true;
-    } catch (e) {
-      commandError = String(e);
-      console.error("Panel health: no se pudieron registrar los comandos slash:", commandError);
-    }
     return json({
       ok: true,
       service: "PRIME POLICE · Panel API",
       login: "Inicio de sesión OAuth2 con Discord y comprobación de roles UCOP, Directiva, Gobierno, Staff y Dev Discord.",
       oauth_redirect_uri: DISCORD_OAUTH_CALLBACK,
-      commands_registered: commandsRegistered,
+      commands_status: "managed_separately",
       configured: { discord: Boolean(BOT_TOKEN), database: Boolean(SUPABASE_URL && SERVICE_KEY), discord_oauth: Boolean(DISCORD_OAUTH_CLIENT_SECRET) },
-      warning: commandsRegistered ? undefined : "La API está activa, pero no se pudieron actualizar los comandos de Discord.",
-      version: "all-changes-directiva-2026-10-28i",
+
+      version: "connection-resilience-2026-10-28j",
     });
   }
   return json({ error: "Método no permitido." }, 405);
@@ -599,13 +579,14 @@ async function dispatchWithLocks(req:Request):Promise<Response>{
  }catch(error){console.error("Guarded request:",String(error));return json({error:"No se pudo preparar la operación. Comprueba las migraciones y vuelve a consultar el registro."},503);}
 }
 
-Deno.serve(async(req:Request)=>{try{
+async function dispatchHttp(req:Request):Promise<Response>{try{
  const action=new URL(req.url).searchParams.get('panel')||'',origin=req.headers.get('origin');
  if(action!=='oauth-callback'&&origin&&origin!==PANEL_ORIGIN)return json({error:'Origen no autorizado.'},403);
  if(req.method==='OPTIONS')return routePanel(req);
  const intercepted=await interceptChanges(req,action,{db,authorizedUser,discord,dispatch:routePanel,json});
  return intercepted||await dispatchWithLocks(req);
-}catch(error){console.error('Request dispatch:',String(error));return json({error:'No se pudo procesar la petición. Comprueba la conexión y actualiza el registro.'},503);}});
+ }catch(error){console.error('Request dispatch:',String(error));const upstream=discordFailure(error);return upstream?json(upstream.body,upstream.status):json({error:'No se pudo procesar la petición. Comprueba la conexión y actualiza el registro.'},503);}}
+Deno.serve(async(req:Request)=>{const started=performance.now(),requestId=crypto.randomUUID();const response=await dispatchHttp(req);const headers=new Headers(response.headers);headers.set('X-Request-ID',requestId);headers.set('Access-Control-Expose-Headers','X-Request-ID');console.info('panel_request',JSON.stringify({request_id:requestId,action:new URL(req.url).searchParams.get('panel')||'health',method:req.method,status:response.status,elapsed_ms:Math.round(performance.now()-started)}));return new Response(response.body,{status:response.status,headers});});
 const WARN_ROLE_IDS = ["1539970134482092032", "1539970134469378077", "1539970134469378076"];
 const STRIKE_ROLE_IDS = ["1539970134469378075", "1539970134469378074", "1539970134469378073"];
 const EXPELLED_ROLE_ID = "1539970134482092034";

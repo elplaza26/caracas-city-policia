@@ -1,3 +1,4 @@
+import { discordRequest, discordFailure } from "./discord-client.ts";
 import { writeAudit } from "./audit-events.ts";
 import { accessMember } from "./access-member.ts";
 const GUILD_ID = "1539970134469378068";
@@ -70,6 +71,7 @@ async function db(path: string, init: RequestInit = {}) {
   if (!SUPABASE_URL || !SERVICE_KEY) throw new Error("Base de datos no configurada");
   const response = await fetch(SUPABASE_URL + "/rest/v1/" + path, {
     ...init,
+    signal:init.signal??AbortSignal.timeout(12000),
     headers: { apikey: SERVICE_KEY, Authorization: "Bearer " + SERVICE_KEY, "Content-Type": "application/json", Prefer: "return=representation", ...(init.headers ?? {}) },
   });
   const text = await response.text();
@@ -79,15 +81,7 @@ async function db(path: string, init: RequestInit = {}) {
   return body;
 }
 
-async function discord(path: string, init: RequestInit = {}) {
-  if (!BOT_TOKEN) throw new Error("Bot de Discord no configurado");
-  const response = await fetch("https://discord.com/api/v10" + path, { ...init, headers: { Authorization: "Bot " + BOT_TOKEN, "Content-Type": "application/json", ...(init.headers ?? {}) } });
-  const text = response.status === 204 ? "" : await response.text();
-  let body: any;
-  try { body = text ? JSON.parse(text) : null; } catch { body = text; }
-  if (!response.ok) throw new Error("Discord API " + response.status + ": " + JSON.stringify(body));
-  return body;
-}
+const discord = discordRequest;
 
 async function postRankAuditLog(title: string, color: number, fields: Array<{ name: string; value: string }>) {
   await writeAudit(title,fields);
@@ -248,6 +242,7 @@ async function registerPersonnel(req: Request) {
       if (addedTargetRole) await discord("/guilds/" + GUILD_ID + "/members/" + enc(id) + "/roles/" + rankRoleId, { method: "DELETE" });
       for (const roleId of oldRoles) await discord("/guilds/" + GUILD_ID + "/members/" + enc(id) + "/roles/" + roleId, { method: "PUT", body: "{}" });
     } catch (rollbackError) { console.error("Personnel registration rollback failed:", String(rollbackError)); }
+    const upstream=discordFailure(error);if(upstream)return json(upstream.body,upstream.status);
     const message = String(error);
     if (message.includes("Discord API 403") || message.includes("50013")) return json({ error: "Discord denegó el cambio. El bot necesita Administrar roles y Gestionar apodos, y su rol debe estar por encima del rango." }, 502);
     if (message.includes("Discord API 404") || message.includes("10007")) return json({ error: "No se encontró al usuario en el servidor." }, 404);
@@ -444,6 +439,7 @@ async function reviewRankRequest(req: Request) {
     return json({ ok: true, warning: nicknameWarning || undefined, message: decision !== "accept" ? "Solicitud rechazada." : policeOnlyRequest ? "Ingreso aprobado; rol Policía asignado. Asigna rama y rango desde Personal." : "Solicitud aprobada; rol de Policía y rango asignados." });
   } catch (error) {
     console.error("Rank request review error:", String(error));
+    const upstream=discordFailure(error);if(upstream)return json(upstream.body,upstream.status);
     const message=String(error);
     if(message.includes("Discord API 403"))return json({error:"Discord no permite asignar Policía. Comprueba Administrar roles y coloca el rol del bot por encima de Policía."},502);
     if(message.includes("Discord API 404"))return json({error:"No se encontró al agente o revisor en el servidor de Discord."},404);
@@ -593,6 +589,7 @@ async function changeRank(req: Request) {
         else await db("police_personnel?discord_user_id=eq." + enc(targetId), { method: "DELETE" });
       } catch (rollbackError) { console.error("Rank change rollback failed:", String(rollbackError)); }
     }
+    const upstream=discordFailure(error);if(upstream)return json(upstream.body,upstream.status);
     const message = String(error);
     if (message.includes("Discord API 403") || message.includes("50013")) return json({ error: "Discord denegó el cambio. El bot necesita Administrar roles y Gestionar apodos, y su rol debe estar por encima del rango." }, 502);
     if (message.includes("Discord API 404") || message.includes("10007")) return json({ error: "No se encontró al oficial en el servidor." }, 404);

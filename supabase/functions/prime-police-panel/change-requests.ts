@@ -1,3 +1,4 @@
+import { discordFailure } from "./discord-client.ts";
 import { accessMember } from './access-member.ts';
 import { withOperationLock } from './operation-lock.ts';
 import { writeAudit } from './audit-events.ts';
@@ -69,7 +70,7 @@ export async function interceptChanges(req:Request,action:string,c:Context):Prom
     return c.json({ok:true,message:outcome.message||'Cambio aprobado y aplicado.',warning:outcome.warning});
    }catch(error){console.error('Review pending change:',String(error));if(applied)return c.json({ok:true,message:'Cambio aplicado.',warning:'Falta cerrar el expediente. No repitas la aprobación.'});
     if(claimed)try{await c.db('police_change_requests?id=eq.'+encodeURIComponent(proposalId)+'&status=eq.processing',{method:'PATCH',body:JSON.stringify({status:'failed',review_reason:String(error).replace(/^Error: /,'').slice(0,500)})});}catch{/* never reopen a possibly executed operation */}
-    return c.json({error:claimed?String(error).replace(/^Error: /,''):'No se pudo procesar la solicitud.'},409);
+    const upstream=discordFailure(error);if(upstream)return c.json(upstream.body,upstream.status);return c.json({error:claimed?String(error).replace(/^Error: /,''):'No se pudo procesar la solicitud.'},409);
    }
   });
  }
@@ -79,5 +80,5 @@ export async function interceptChanges(req:Request,action:string,c:Context):Prom
   const rows=await c.db('police_change_requests',{method:'POST',body:JSON.stringify({action,resource_key:before.resource,requested_by:actor,requested_by_name:actorName,payload,before_state:before.state,fingerprint:await fingerprint(before.state)})});
   await writeAudit('⏳ Cambio pendiente de Directiva',[{name:'Cambio',value:CHANGE_ACTIONS[action]},{name:'Propuesto por',value:actorName},{name:'Referencia',value:before.resource}]);
   return c.json({ok:true,pending_approval:true,request_id:rows?.[0]?.id,message:'Propuesta enviada a Pendientes del panel principal. Directiva debe aprobarla antes de que se aplique.'});
- }catch(error){console.error('Queue pending change:',String(error));if(String(error).includes('409'))return c.json({error:'Ya hay una propuesta de este tipo pendiente para este registro.'},409);return c.json({error:'No se pudo preparar la propuesta. Revisa el registro y las migraciones.'},400);}
+ }catch(error){console.error('Queue pending change:',String(error));const upstream=discordFailure(error);if(upstream)return c.json(upstream.body,upstream.status);if(String(error).includes('409'))return c.json({error:'Ya hay una propuesta de este tipo pendiente para este registro.'},409);return c.json({error:'No se pudo preparar la propuesta. Revisa el registro y las migraciones.'},400);}
 }
