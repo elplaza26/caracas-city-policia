@@ -44,6 +44,7 @@
       <button class="workspace-tab" data-view="personnel" data-title="Personal de Policía"><span>04</span> Personal de Policía</button>
       <button class="workspace-tab" data-view="ranks" data-title="Ascensos y descensos"><span>05</span> Ascensos y descensos</button>
       <button class="workspace-tab" data-view="sanctions" data-title="Sanciones UCOP"><span>06</span> Sanciones UCOP</button>
+      <button class="workspace-tab" data-view="transfers" data-title="Traslados"><span>07</span> Traslados</button>
     </nav>
     <div class="sidebar-bottom">
       <div id="connection" class="connection">Comprobando conexión…</div>
@@ -155,6 +156,13 @@
     </section>
     <div id="appNotice" class="notice hidden"></div>
     <div id="candidateList" class="candidate-list"><div class="empty">Cargando candidaturas…</div></div>
+    <section id="transfersView" class="hidden">
+      <section class="intro"><h2>Solicitudes de traslado</h2><p>Revisa las solicitudes de ingreso desde otra facción o ciudad. Al aceptar, se asigna el rol Traslado para coordinar después una entrevista IC.</p></section>
+      <section class="stats"><div class="stat"><span>Pendientes</span><strong id="transferPendingCount">0</strong></div><div class="stat"><span>Aceptadas</span><strong id="transferAcceptedCount">0</strong></div><div class="stat"><span>Rechazadas</span><strong id="transferRejectedCount">0</strong></div></section>
+      <div class="toolbar"><h2 id="transferListTitle">Traslados pendientes</h2><button id="refreshTransfers" class="btn" type="button">Actualizar</button></div>
+      <nav id="transferStatusTabs" class="tabs" style="display:flex;gap:8px;flex-wrap:wrap;margin:14px 0"><button class="btn tab primary" data-transfer-status="pending">Pendientes</button><button class="btn tab" data-transfer-status="accepted">Aceptadas</button><button class="btn tab" data-transfer-status="rejected">Rechazadas</button></nav>
+      <div id="transferList" class="candidate-list"><div class="empty">Carga las solicitudes de traslado.</div></div>
+    </section>
   </section>
   <footer class="footer">PRIME POLICE · Panel administrativo privado · Decisiones registradas en base de datos.</footer>
   </div>
@@ -184,9 +192,11 @@ const API_BASE = "https://ngkmylqsdeevdtrjrgfn.supabase.co/functions/v1/prime-po
 const TOKEN_KEY = "primePolicePanelSession";
 let activeStatus = "pending";
 let activeRankRequestStatus = "pending";
+let activeTransferStatus = "pending";
 let token = sessionStorage.getItem(TOKEN_KEY) || "";
 let applications = [];
 let rankRequests = [];
+let transfers = [];
 let preselections = [];
 let sanctions = [];
 let personnel = [];
@@ -373,6 +383,44 @@ async function loadApplications() {
     $("refreshButton").textContent = "Actualizar";
   }
 }
+function renderTransfers() {
+  const list = $("transferList");
+  list.replaceChildren();
+  const visible = transfers.filter(item => item.status === activeTransferStatus);
+  $("transferListTitle").textContent = activeTransferStatus === "pending" ? "Traslados pendientes" : activeTransferStatus === "accepted" ? "Traslados aceptados" : "Traslados rechazados";
+  $("transferPendingCount").textContent = transfers.filter(x => x.status === "pending").length;
+  $("transferAcceptedCount").textContent = transfers.filter(x => x.status === "accepted").length;
+  $("transferRejectedCount").textContent = transfers.filter(x => x.status === "rejected").length;
+  document.querySelectorAll("[data-transfer-status]").forEach(b => b.classList.toggle("active", b.dataset.transferStatus === activeTransferStatus));
+  if (!visible.length) { const empty=document.createElement("div");empty.className="empty";empty.textContent=transfers.some(x=>x.status===activeTransferStatus)?"No hay resultados.":activeTransferStatus==="pending"?"No hay traslados pendientes.":"Todavía no hay solicitudes en esta sección.";list.append(empty);return; }
+  visible.forEach(item => {
+    const card=document.createElement("article");card.className="candidate";
+    const head=document.createElement("div");head.className="candidate-head";
+    const identity=document.createElement("div"),name=document.createElement("h3"),discordName=document.createElement("div"),status=document.createElement("span");
+    name.textContent=item.full_name||"Solicitud de traslado";discordName.className="muted";discordName.textContent=(item.discord_username||"Discord")+" · ID "+item.discord_user_id;identity.append(name,discordName);status.className="badge "+(item.status==="pending"?"pending":item.status==="accepted"?"accepted":"rejected");status.textContent=item.status==="pending"?"Pendiente":item.status==="accepted"?"Aceptada · Traslado":"Rechazada";head.append(identity,status);
+    const grid=document.createElement("div");grid.className="details";
+    grid.append(detail("Fecha de solicitud",niceDate(item.created_at)),detail("Intento",String(item.attempt_number||1)+" / 3"),detail("Edad IC",item.age_ic),detail("Ciudad de procedencia",item.source_city),detail("Facción policial",item.source_faction),detail("Rango actual",item.current_rank),detail("Unidad actual",item.current_unit),detail("Rango solicitado",item.requested_rank),detail("Motivo del traslado",item.reason),detail("Motivo de decisión",item.decision_reason));
+    const actions=document.createElement("div");actions.className="candidate-actions";
+    if(item.status==="pending"){
+      const accept=document.createElement("button");accept.className="btn accept";accept.textContent="Aceptar y asignar rol Traslado";accept.onclick=()=>reviewTransfer(item,"accept",accept);
+      const reject=document.createElement("button");reject.className="btn reject";reject.textContent="Rechazar";reject.onclick=()=>reviewTransfer(item,"reject",reject);actions.append(accept,reject);
+    } else {const done=document.createElement("span");done.className="muted";done.textContent=(item.status==="accepted"?"Rol Traslado asignado · ":"Revisada · ")+niceDate(item.reviewed_at);actions.append(done);}
+    const spacer=document.createElement("span");spacer.className="spacer";const reviewer=document.createElement("span");reviewer.className="muted";reviewer.textContent=item.reviewed_by_name?"Revisado por "+item.reviewed_by_name:"";actions.append(spacer,reviewer);card.append(head,grid,actions);list.append(card);
+  });
+}
+async function loadTransfers(){
+  const button=$("refreshTransfers");button.disabled=true;button.textContent="Actualizando…";
+  try{const result=await request("transfers");transfers=result.transfers||[];renderTransfers();}
+  catch(error){const list=$("transferList"),empty=document.createElement("div");empty.className="empty";empty.textContent=error.message;list.replaceChildren(empty);}
+  finally{button.disabled=false;button.textContent="Actualizar";}
+}
+async function reviewTransfer(item,action,button){
+  if(action==="accept"&&!confirm("¿Aceptar el traslado de "+item.full_name+" y asignarle el rol Traslado para coordinar una entrevista IC?"))return;
+  if(action==="reject"&&!confirm("¿Rechazar la solicitud de traslado de "+item.full_name+"?"))return;
+  const reason=action==="reject"?(prompt("Motivo de la decisión (opcional):","")||""):"";button.disabled=true;const old=button.textContent;button.textContent="Procesando…";
+  try{const result=await request("transfer-decision",{method:"POST",body:{id:item.id,action,reason}});showToast(result.warning|| (action==="accept"?"Traslado aceptado y rol asignado.":"Traslado rechazado."));await loadTransfers();}
+  catch(error){showToast(error.message);button.disabled=false;button.textContent=old;await loadTransfers();}
+}
 function renderPreselections() {
   const rows=$("preselectionRows"),query=$("preselectionSearch").value.trim().toLocaleLowerCase("es");
   const visible=preselections.filter(person=>[person.full_name,person.discord_username,person.discord_user_id].join(" ").toLocaleLowerCase("es").includes(query));
@@ -534,10 +582,12 @@ document.querySelectorAll("#rankRequestStatusTabs .tab").forEach(button=>button.
 document.querySelectorAll("#applicationStatusTabs .tab").forEach(button=>button.addEventListener("click",()=>{activeStatus=button.dataset.status;renderApplications();}));
 $("rankRequestSearch").addEventListener("input",renderRankRequests);
 $("refreshRankRequests").addEventListener("click",loadRankRequests);
-document.querySelectorAll(".workspace-tab").forEach(button=>button.addEventListener("click",()=>{const view=button.dataset.view,apps=view==="applications",rankReq=view==="rank-requests",preselection=view==="preselections",sanctions=view==="sanctions",staff=view==="personnel",ranks=view==="ranks";$("sanctionsView").classList.toggle("hidden",!sanctions);$("rankRequestsView").classList.toggle("hidden",!rankReq);$("preselectionsView").classList.toggle("hidden",!preselection);$("personnelView").classList.toggle("hidden",!staff);$("rankView").classList.toggle("hidden",!ranks);["applicationsIntro","applicationStats","applicationsToolbar","applicationStatusTabs"].forEach(id=>$(id).classList.toggle("hidden",!apps));$("candidateList").classList.toggle("hidden",!apps);document.querySelectorAll(".workspace-tab").forEach(b=>b.classList.toggle("active",b===button));$("workspaceTitle").textContent=button.dataset.title||button.textContent.trim();if(apps)loadApplications();if(rankReq)loadRankRequests();if(preselection)loadPreselections();if(sanctions){loadPersonnel();loadSanctions();}if(staff){loadPersonnel();loadRankConfig();}if(ranks){loadRankConfig();loadPersonnel();loadRankHistory();}}));$("discordLoginButton").addEventListener("click", () => {
+document.querySelectorAll(".workspace-tab").forEach(button=>button.addEventListener("click",()=>{const view=button.dataset.view,apps=view==="applications",rankReq=view==="rank-requests",preselection=view==="preselections",sanctions=view==="sanctions",staff=view==="personnel",ranks=view==="ranks",transfer=view==="transfers";$("sanctionsView").classList.toggle("hidden",!sanctions);$("rankRequestsView").classList.toggle("hidden",!rankReq);$("preselectionsView").classList.toggle("hidden",!preselection);$("personnelView").classList.toggle("hidden",!staff);$("rankView").classList.toggle("hidden",!ranks);$("transfersView").classList.toggle("hidden",!transfer);["applicationsIntro","applicationStats","applicationsToolbar","applicationStatusTabs"].forEach(id=>$(id).classList.toggle("hidden",!apps));$("candidateList").classList.toggle("hidden",!apps);document.querySelectorAll(".workspace-tab").forEach(b=>b.classList.toggle("active",b===button));$("workspaceTitle").textContent=button.dataset.title||button.textContent.trim();if(apps)loadApplications();if(rankReq)loadRankRequests();if(preselection)loadPreselections();if(transfer)loadTransfers();if(sanctions){loadPersonnel();loadSanctions();}if(staff){loadPersonnel();loadRankConfig();}if(ranks){loadRankConfig();loadPersonnel();loadRankHistory();}}));$("discordLoginButton").addEventListener("click", () => {
   $("loginError").textContent = "";
   window.location.assign(API_BASE + "?panel=oauth-start");
 });$("refreshButton").addEventListener("click", loadApplications);
+$("refreshTransfers").addEventListener("click",loadTransfers);
+document.querySelectorAll("[data-transfer-status]").forEach(button=>button.addEventListener("click",()=>{activeTransferStatus=button.dataset.transferStatus;renderTransfers();}));
 $("logoutButton").addEventListener("click", () => { showLogin(); $("loginError").textContent = ""; showToast("Sesión cerrada."); });
 $("search").addEventListener("input", () => renderApplications());
 

@@ -37,6 +37,7 @@ Los rangos se configuran dentro del panel: abre **Ascensos y descensos**, añade
 
 - `index.html`: interfaz del panel.
 - `supabase/functions/prime-police-panel/index.ts`: acceso, postulaciones, decisiones y sanciones.
+- Solicitudes de traslado: formulario privado en el canal `1564900830077788190`, revisión en la pestaña **Traslados** y asignación del rol `1564907324638888017` al aceptar. El rol permite coordinar una entrevista IC; no añade automáticamente el rol de Policía.
 - `supabase/functions/prime-police-panel/hr.ts`: personal, solicitudes de rango, jerarquía e historial.
 - `supabase/functions/prime-police-discord/index.ts`: comandos e interacciones de Discord.
 - `supabase/migrations/`: esquema de postulaciones, preseleccionados, personal, rangos, solicitudes e historial.

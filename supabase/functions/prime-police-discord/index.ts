@@ -7,6 +7,7 @@ const CIC_ROLE_ID = "1539970134519578772";
 const EXPELLED_ROLE_ID = "1539970134482092034";
 const APPLICATION_ANNOUNCEMENTS_CHANNEL_ID = "1539970135375478860";
 const RANK_REQUEST_CHANNEL_ID = "1539970135375478859";
+const TRANSFER_CHANNEL_ID = "1564900830077788190";
 const POLICE_ONLY_RANK_LABEL = "Solo rol de Policía (sin rango configurado)";
 const APPLICATION_ID = "1540484542354428025";
 const MANAGER_ROLE_IDS = new Set(["1539970134565982313", "1539970134544748562", "1539970134544748556", "1539970134544748557", "1539970134519578773", "1539970134519578774"]);
@@ -46,6 +47,33 @@ async function processApplicationSubmit(i:any,userId:string,username:string,a:an
  if(!submitted?.ok){await editInteractionReply(i,String(submitted?.message||"No se pudo aceptar la postulación."));return;}
  await editInteractionReply(i,"¡Postulación recibida! Este es tu intento "+submitted.attempt_number+" de 3. El equipo de PRIME POLICE la revisará y comunicará el resultado en el canal correspondiente.");
 }
+async function processTransferSubmit(i:any,userId:string,username:string,a:any){
+ const fullName=String(a.full_name||"").trim().slice(0,100);
+ const ageText=String(a.age_ic||"").trim();
+ const age=/^\d{1,3}$/.test(ageText)?Number(ageText):NaN;
+ const origin=String(a.source_data||"");
+ const city=(origin.match(/ciudad\s*:\s*([^|\n]+)/i)?.[1]||"").trim().slice(0,100);
+ const faction=(origin.match(/facción\s*:\s*([^|\n]+)/i)?.[1]||"").trim().slice(0,100);
+ const current=String(a.current_data||"");
+ const rank=(current.match(/rango\s*:\s*([^|\n]+)/i)?.[1]||"").trim().slice(0,100);
+ const unit=(current.match(/unidad\s*:\s*([^|\n]+)/i)?.[1]||"").trim().slice(0,100);
+ const requested=String(a.transfer_reason||"").trim().slice(0,1000);
+ const desired=(requested.match(/rango\s*solicitado\s*:\s*([^|\n]+)/i)?.[1]||"").trim().slice(0,100);
+ const reason=requested.replace(/rango\s*solicitado\s*:\s*[^|\n]+\s*\|?\s*/i,"").trim();
+ if(!fullName||!Number.isInteger(age)||age<1||age>120||!city||!faction||!rank||!reason){await editInteractionReply(i,"Completa nombre, edad IC, ciudad, facción, rango actual y motivo del traslado.");return;}
+ const pending=await db("police_transfer_applications?select=id&discord_user_id=eq."+encodeURIComponent(userId)+"&status=eq.pending&limit=1");
+ if(pending?.length){await editInteractionReply(i,"Ya tienes una solicitud de traslado pendiente de revisión por UCOP.");return;}
+ const previous=await db("police_transfer_applications?select=attempt_number&discord_user_id=eq."+encodeURIComponent(userId)+"&order=created_at.asc");
+ if(previous?.length>=3){await editInteractionReply(i,"Ya utilizaste tus 3 intentos para solicitar un traslado a PRIME POLICE.");return;}
+ try {
+  const rows=await db("police_transfer_applications",{method:"POST",body:JSON.stringify({discord_user_id:userId,discord_username:username,full_name:fullName,age_ic:age,source_city:city,source_faction:faction,current_rank:rank,current_unit:unit,requested_rank:desired,reason,attempt_number:previous.length+1})});
+  if(!rows?.[0]?.id)throw Error("Transfer request was not stored");
+ } catch(error){
+  if(String(error).includes("409")){await editInteractionReply(i,"Ya tienes una solicitud de traslado pendiente de revisión por UCOP.");return;}
+  throw error;
+ }
+ await editInteractionReply(i,"Solicitud de traslado recibida de forma privada. Este es tu intento "+(previous.length+1)+" de 3. UCOP revisará tu información y te comunicará el resultado. Si se aprueba, recibirás el rol Traslado para coordinar una entrevista IC.");
+}
 async function processRankRequest(i:any,userId:string,username:string,a:any){
  const characterName=String(a.character_name||"").trim().slice(0,100);
  const plate=String(a.plate||"").trim().slice(0,30);
@@ -84,6 +112,13 @@ function modal(){return response(9,{custom_id:"prime_application_submit",title:"
  {type:18,label:"Mala praxis o corrupción",description:"Si un compañero comete una falta grave o acepta un soborno, ¿qué harías y a quién informarías?",component:modalInput("scene_resolution","Escribe tu respuesta.")},
  {type:18,label:"Situaciones policiales",description:"1) Varios vehículos sospechosos: ¿cómo pides apoyo? 2) Persona con bate agresiva: ¿cómo actúas?",component:modalInput("roleplay_response","Escribe tu respuesta.")}
 ]})}
+function transferModal(){return response(9,{custom_id:"prime_transfer_submit",title:"Traslado · PRIME POLICE",components:[
+ {type:18,label:"Nombre IC",description:"Indica nombre y apellido de tu personaje.",component:modalInput("full_name","Nombre y apellido IC",true,1)},
+ {type:18,label:"Edad IC",component:modalInput("age_ic","Edad de tu personaje",true,1,3)},
+ {type:18,label:"Ciudad y facción de procedencia",description:"Escribe ambos datos con este formato.",component:modalInput("source_data","Ciudad: ... | Facción: ...",true)},
+ {type:18,label:"Rango y unidad actuales",description:"Indica tu rango y unidad/división actual.",component:modalInput("current_data","Rango: ... | Unidad: ...",true)},
+ {type:18,label:"Rango solicitado y motivo",description:"Formato: Rango solicitado: ... | Motivo: ...",component:modalInput("transfer_reason","Rango solicitado: ... | Motivo: ...",true)}
+]})}
 function values(interaction:any){const out:any={};const visit=(node:any)=>{if(!node||typeof node!=="object")return;if(typeof node.custom_id==="string"&&node.value!==undefined)out[node.custom_id]=String(node.value||"").trim();if(Array.isArray(node.components))for(const child of node.components)visit(child);if(node.component)visit(node.component)};for(const component of interaction.data?.components||[])visit(component);return out}
 async function handle(i:any){
  if(i.type===1)return response(1,{});
@@ -96,9 +131,11 @@ async function handle(i:any){
     try{
      const applicationPanel={embeds:[{title:"📝 Preselección de ingreso · PRIME POLICE",description:"Completa la postulación para que **UCOP** revise tu solicitud. Cada persona dispone de un máximo de **3 intentos**.\n\nAl pulsar **Presentar postulación** se abrirá un formulario privado: el canal no mostrará tus respuestas ni un mensaje por cada paso. Solo el personal autorizado las revisará desde la web.\n\nSi te aprueban, recibirás el rol **Preselección** y UCOP coordinará contigo una **entrevista IC**. Después podrás solicitar el rol de Policía y tu rango desde <#"+RANK_REQUEST_CHANNEL_ID+">.",color:14264415,footer:{text:"PRIME POLICE · Preselección UCOP"}}],components:[{type:1,components:[{type:2,style:1,label:"Presentar postulación",custom_id:"prime_apply"}]}]};
      const rankPanel={embeds:[{title:"📈 Solicitud de rango · UCOP",description:"Este formulario es para personas con rol **Preselección o Policía** que ya aprobaron su **entrevista IC**.\n\nCompleta el formulario. El acuse y las respuestas del formulario son privados: solo los verá quien lo envía. UCOP revisará la solicitud desde la web. Si aún no hay rangos configurados, se podrá aprobar solo el rol de **Policía** y añadir el rango más adelante.",color:14264415,footer:{text:"PRIME POLICE · Solicitudes UCOP · Respuesta privada"}}],components:[{type:1,components:[{type:2,style:2,label:"Solicitar rango",custom_id:"prime_rank_request"}]}]};
+     const transferPanel={embeds:[{title:"🏛️ UCOP · Solicitud de traslado",description:"¿Perteneces a la Policía de otra **facción o ciudad** y quieres incorporarte a PRIME POLICE?\n\nPulsa el botón para completar el formulario privado. Tus datos solo estarán disponibles para el personal autorizado de UCOP en el panel administrativo.\n\nSi aceptan la solicitud, recibirás el rol **Traslado** para coordinar una **entrevista IC** con UCOP. El rol no implica la incorporación automática como Policía.",color:14264415,footer:{text:"PRIME POLICE · RR. HH. · Solicitudes privadas"}}],components:[{type:1,components:[{type:2,style:1,label:"Solicitar traslado",custom_id:"prime_transfer"}]}]};
      await publishOrUpdatePanel(APPLICATION_ANNOUNCEMENTS_CHANNEL_ID,"prime_apply",applicationPanel);
      await publishOrUpdatePanel(RANK_REQUEST_CHANNEL_ID,"prime_rank_request",rankPanel);
-     await editInteractionReply(i,"Paneles de postulación y solicitud de rango actualizados.");
+     await publishOrUpdatePanel(TRANSFER_CHANNEL_ID,"prime_transfer",transferPanel);
+     await editInteractionReply(i,"Paneles de postulación, solicitud de rango y traslado actualizados.");
     }catch(error){
      console.error("Could not publish application announcement:",String(error));
      try{await editInteractionReply(i,"No se pudo publicar el formulario. Comprueba los permisos del bot y vuelve a intentarlo.");}catch(replyError){console.error("Could not update deferred interaction:",String(replyError));}
@@ -112,6 +149,7 @@ async function handle(i:any){
  }
  if(i.type===3){
   if(i.data?.custom_id==="prime_apply")return modal();
+  if(i.data?.custom_id==="prime_transfer")return transferModal();
   if(i.data?.custom_id==="prime_rank_request")return rankRequestModal();
   return ephemeral("Interacción no reconocida.");
  }
@@ -126,11 +164,16 @@ async function handle(i:any){
   EdgeRuntime.waitUntil((async()=>{try{await processApplicationSubmit(i,userId,username,a);}catch(error){console.error("Could not process application submit:",String(error));try{await editInteractionReply(i,"No se pudo completar el envío. Comprueba si quedó registrada en el panel y contacta con un administrador antes de volver a intentarlo.");}catch(replyError){console.error("Could not update application interaction:",String(replyError));}}})());
   return response(5,{data:{flags:64}});
  }
+ if(i.type===5&&i.data?.custom_id==="prime_transfer_submit"){
+  const a=values(i);
+  EdgeRuntime.waitUntil((async()=>{try{await processTransferSubmit(i,userId,username,a);}catch(error){console.error("Could not process transfer submit:",String(error));try{await editInteractionReply(i,"No se pudo completar el envío. Contacta con UCOP antes de volver a enviarlo.");}catch(replyError){console.error("Could not update transfer interaction:",String(replyError));}}})());
+  return response(5,{data:{flags:64}});
+ }
  return ephemeral("Interacción no compatible.");
 }
 Deno.serve(async(req:Request)=>{
  if(req.method==="OPTIONS")return new Response(null,{status:204,headers:CORS});
- if(req.method==="GET")return json({ok:true,service:"PRIME POLICE Discord applications",release:"private-modal-age-ooc-2026-10-28a",configured:{discord:Boolean(BOT_TOKEN),database:Boolean(SUPABASE_URL&&SERVICE_KEY),public_key:Boolean(DISCORD_PUBLIC_KEY)},application_id:APPLICATION_ID,guild_id:GUILD_ID,commands:["publicar_postulaciones","postulacion"],message:DISCORD_PUBLIC_KEY?"Endpoint disponible.":"Falta configurar DISCORD_PUBLIC_KEY en los secretos de Supabase."});
+ if(req.method==="GET")return json({ok:true,service:"PRIME POLICE Discord applications",release:"private-transfer-2026-10-28a",configured:{discord:Boolean(BOT_TOKEN),database:Boolean(SUPABASE_URL&&SERVICE_KEY),public_key:Boolean(DISCORD_PUBLIC_KEY)},application_id:APPLICATION_ID,guild_id:GUILD_ID,commands:["publicar_postulaciones","postulacion"],message:DISCORD_PUBLIC_KEY?"Endpoint disponible.":"Falta configurar DISCORD_PUBLIC_KEY en los secretos de Supabase."});
  if(req.method!=="POST")return json({error:"Method not allowed"},405);
  const body=await req.text();if(!await validSignature(req,body))return json({error:"Invalid Discord signature or DISCORD_PUBLIC_KEY not configured"},401);
  let i:any;try{i=JSON.parse(body)}catch{return json({error:"Invalid JSON"},400)}

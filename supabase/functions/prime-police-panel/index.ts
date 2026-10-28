@@ -7,6 +7,7 @@ const RESULTS_CHANNEL_ID = "1564350390294552696";
 const RANK_AUDIT_CHANNEL_ID = "1539970137246142604";
 const POLICE_ROLE_ID = "1539970134482092038";
 const PRESELECTION_ROLE_ID = "1564685481457877012";
+const TRANSFER_ROLE_ID = "1564907324638888017";
 const APPLICATION_ID = "1540484542354428025";
 const BOT_TOKEN = Deno.env.get("DISCORD_BOT_TOKEN") ?? "";
 const DISCORD_OAUTH_CLIENT_SECRET = Deno.env.get("DISCORD_OAUTH_CLIENT_SECRET") ?? "";
@@ -304,6 +305,69 @@ async function listApplications(req: Request) {
   }
 }
 
+async function listTransfers(req: Request) {
+  const userId = await authorizedUser(req);
+  if (!userId) return json({ error: "Sesión caducada o sin permisos de gestión." }, 403);
+  try {
+    const transfers = await db("police_transfer_applications?select=*&order=created_at.desc&limit=100");
+    return json({ ok: true, transfers: transfers ?? [] });
+  } catch (e) {
+    console.error("Transfer list error:", String(e));
+    return json({ error: "No se pudieron cargar las solicitudes de traslado." }, 500);
+  }
+}
+
+async function decideTransfer(req: Request) {
+  const reviewerId = await authorizedUser(req);
+  if (!reviewerId) return json({ error: "Sesión caducada o sin permisos de gestión." }, 403);
+  let body: any;
+  try { body = await req.json(); } catch { return json({ error: "Solicitud inválida." }, 400); }
+  const id = String(body?.id ?? "");
+  const action = String(body?.action ?? "");
+  const reason = String(body?.reason ?? "").trim().slice(0, 500);
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) || !["accept", "reject"].includes(action)) return json({ error: "Solicitud o decisión inválida." }, 400);
+  try {
+    const rows = await db("police_transfer_applications?select=*&id=eq." + encodeURIComponent(id) + "&limit=1");
+    const item = rows?.[0];
+    if (!item) return json({ error: "No se encontró esa solicitud de traslado." }, 404);
+    if (item.status !== "pending") return json({ error: "Esta solicitud ya fue revisada." }, 409);
+    if (action === "accept") {
+      try { await discord("/guilds/" + GUILD_ID + "/members/" + encodeURIComponent(item.discord_user_id) + "/roles/" + TRANSFER_ROLE_ID, { method: "PUT", body: JSON.stringify({}) }); }
+      catch (e) {
+        const detail = String(e);
+        if (detail.includes("403") || detail.includes("50013")) return json({ error: "Discord denegó el rol. El bot necesita Administrar roles y estar por encima del rol Traslado." }, 502);
+        if (detail.includes("404") || detail.includes("10007")) return json({ error: "No se encontró a esta persona en el servidor." }, 502);
+        return json({ error: "No se pudo asignar el rol Traslado." }, 502);
+      }
+    }
+    let reviewerName = reviewerId;
+    try { const reviewer = await discord("/guilds/" + GUILD_ID + "/members/" + encodeURIComponent(reviewerId)) as any; reviewerName = String(reviewer.nick || reviewer.user?.global_name || reviewer.user?.username || reviewerId); } catch { /* use ID */ }
+    const now = new Date().toISOString();
+    const updated = await db("police_transfer_applications?id=eq." + encodeURIComponent(id) + "&status=eq.pending", { method: "PATCH", body: JSON.stringify({ status: action === "accept" ? "accepted" : "rejected", decision_reason: reason, reviewed_by_discord_id: reviewerId, reviewed_by_name: reviewerName, reviewed_at: now, ...(action === "accept" ? { role_assigned_at: now } : {}) }) });
+    if (!updated?.length) return json({ error: "La solicitud cambió durante la revisión. Actualiza la lista." }, 409);
+    await postAuditLog(action === "accept" ? "✅ Traslado aceptado" : "❌ Traslado rechazado", action === "accept" ? 0x45b879 : 0xe87979, [
+      { name: "Agente", value: String(item.full_name || item.discord_username) },
+      { name: "Procedencia", value: String(item.source_city) + " · " + String(item.source_faction) },
+      { name: "Discord ID", value: String(item.discord_user_id) },
+      { name: "Decisión por", value: reviewerName },
+      ...(reason ? [{ name: "Motivo", value: reason }] : []),
+    ]);
+    let notified = false;
+    try {
+      const accepted = action === "accept";
+      const description = accepted
+        ? "UCOP ha aceptado tu solicitud de traslado y se te ha asignado el rol <@&" + TRANSFER_ROLE_ID + ">. Contacta con UCOP para coordinar tu entrevista IC."
+        : "UCOP ha revisado tu solicitud de traslado y, por el momento, no ha sido aprobada." + (reason ? " Motivo: " + reason : "");
+      await discord("/channels/" + RESULTS_CHANNEL_ID + "/messages", { method: "POST", body: JSON.stringify({ content: "<@" + String(item.discord_user_id) + ">", embeds: [{ title: accepted ? "🚔 Traslado aceptado · PRIME POLICE" : "📋 Resultado de solicitud de traslado", description, color: accepted ? 0x45b879 : 0xd5ad5a }], allowed_mentions: { parse: [], users: [String(item.discord_user_id)], roles: accepted ? [TRANSFER_ROLE_ID] : [] } }) });
+      notified = true;
+    } catch (e) { console.error("Transfer result notification failed:", String(e)); }
+    return json({ ok: true, status: updated[0].status, role_assigned: action === "accept", results_notified: notified, warning: notified ? undefined : "La decisión se guardó, pero no se pudo enviar el resultado en Discord." });
+  } catch (e) {
+    console.error("Transfer decision error:", String(e));
+    return json({ error: "No se pudo guardar la decisión." }, 500);
+  }
+}
+
 async function decide(req: Request) {
   const reviewerId = await authorizedUser(req);
   if (!reviewerId) return json({ error: "Sesión caducada o sin permisos de gestión." }, 403);
@@ -478,6 +542,8 @@ Deno.serve(async (req: Request) => {
   if (action === "me" && req.method === "GET") return await currentUser(req);
   if (action === "data" && req.method === "GET") return await listApplications(req);
   if (action === "decision" && req.method === "POST") return await decide(req);
+  if (action === "transfers" && req.method === "GET") return await listTransfers(req);
+  if (action === "transfer-decision" && req.method === "POST") return await decideTransfer(req);
   if (action === "sanctions" && req.method === "GET") return await listSanctions(req);
   if (action === "sanction" && req.method === "POST") return await createSanction(req);
   if (action === "sanction-delete" && req.method === "POST") return await deleteSanction(req);
@@ -502,7 +568,7 @@ Deno.serve(async (req: Request) => {
       commands_registered: commandsRegistered,
       configured: { discord: Boolean(BOT_TOKEN), database: Boolean(SUPABASE_URL && SERVICE_KEY), discord_oauth: Boolean(DISCORD_OAUTH_CLIENT_SECRET) },
       warning: commandsRegistered ? undefined : "La API está activa, pero no se pudieron actualizar los comandos de Discord.",
-      version: "preselection-private-applications-2026-10-28a",
+      version: "private-transfer-applications-2026-10-28a",
     });
   }
   return json({ error: "Método no permitido." }, 405);
