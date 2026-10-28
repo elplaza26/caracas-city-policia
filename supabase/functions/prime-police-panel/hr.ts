@@ -273,7 +273,7 @@ async function saveRankConfig(req: Request) {
     }
     const mapped = ids.map((id: string, index: number) => ({ role_id: id, role_name: String(byId.get(id).name), rank_order: index + 1, minimum_days: Number(Object.prototype.hasOwnProperty.call(suppliedDays, id) ? suppliedDays[id] : existingDays.get(id) ?? 0), updated_at: new Date().toISOString() }));
     try {
-      await db("police_rank_roles", { method: "DELETE" });
+      await db("police_rank_roles?role_id=not.is.null", { method: "DELETE" });
       if (mapped.length) await db("police_rank_roles", { method: "POST", body: JSON.stringify(mapped) });
     } catch (error) {
       if (existing?.length) { try { await db("police_rank_roles", { method: "POST", body: JSON.stringify(existing) }); } catch (restoreError) { console.error("Rank config restore failed:", String(restoreError)); } }
