@@ -17,7 +17,7 @@ const BOT_TOKEN = Deno.env.get("DISCORD_BOT_TOKEN") ?? "";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const encoder = new TextEncoder();
-const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, apikey, content-type", "Access-Control-Allow-Methods": "GET, POST, OPTIONS", Vary: "Origin" } });
+const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "https://primepolicerp.github.io", "Access-Control-Allow-Headers": "authorization, apikey, content-type", "Access-Control-Allow-Methods": "GET, POST, OPTIONS", Vary: "Origin", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer" } });
 
 async function db(path: string, init: RequestInit = {}) {
   if (!SUPABASE_URL || !SERVICE_KEY) throw new Error("Base de datos no configurada");
@@ -86,6 +86,12 @@ async function authorizedUser(req: Request): Promise<string | null> {
 
 const validDiscordId = (value: string) => /^\d{17,20}$/.test(value);
 const enc = (value: string) => encodeURIComponent(value);
+const explainRankConfigFailure = (error: unknown) => {
+  const message = String(error);
+  if (message.includes("Discord API 403")) return "El bot no puede leer los roles del servidor. Revisa que siga dentro del servidor y tenga permiso para ver/administrar roles.";
+  if (message.includes("Database 400") || message.includes("minimum_days") || message.includes("police_rank_roles")) return "La base de datos no tiene la estructura de rangos actualizada. Aplica las migraciones pendientes de Supabase y vuelve a actualizar.";
+  return "No se pudo consultar Discord o guardar la escala. Actualiza la función prime-police-panel y vuelve a intentarlo.";
+};
 function isAssignableRankRole(role: any) {
   if (!role || role.managed || PROTECTED_ROLE_IDS.has(String(role.id))) return false;
   try { return (BigInt(String(role.permissions ?? "0")) & BLOCKED_ROLE_PERMISSION_FLAGS) === 0n; }
@@ -180,12 +186,21 @@ async function rankConfig(req: Request) {
       db("police_rank_roles?select=role_id,role_name,rank_order,minimum_days&order=rank_order.asc"),
       discord("/guilds/" + GUILD_ID + "/roles") as Promise<any[]>,
     ]);
-    const roles = (guildRoles ?? []).map((r: any) => ({ id: String(r.id), name: String(r.name), position: Number(r.position), managed: Boolean(r.managed) }));
+    const roles = (guildRoles ?? []).map((r: any) => ({ id: String(r.id), name: String(r.name), position: Number(r.position), managed: Boolean(r.managed), permissions: String(r.permissions ?? "0") }));
     const byId = new Map(roles.map((r: any) => [r.id, r]));
-    const ranks = (configured ?? []).map((r: any) => ({ ...r, role_name: byId.get(r.role_id)?.name ?? r.role_name }));
     const available = roles.filter((r: any) => r.id !== GUILD_ID && isAssignableRankRole(r)).sort((a: any, b: any) => a.position - b.position || a.name.localeCompare(b.name, "es"));
+    if (!(configured ?? []).length && !available.length) return json({ error: "Discord respondió, pero no hay roles asignables. Comprueba los permisos del bot y vuelve a desplegar prime-police-panel." }, 409);
+    const configuredIds = new Set((configured ?? []).map((rank: any) => String(rank.role_id)));
+    if (available.some((role: any) => !configuredIds.has(role.id))) {
+      const synced = await importAllRankRoles(req);
+      const result = await synced.json().catch(() => ({}));
+      if (!synced.ok) return json(result, synced.status);
+      const ranks = (result.ranks ?? []).map((rank: any) => ({ ...rank, role_name: byId.get(String(rank.role_id))?.name ?? rank.role_name }));
+      return json({ ok: true, ranks, available_roles: [], imported_count: Number(result.imported_count ?? 0), auto_synced: true });
+    }
+    const ranks = (configured ?? []).map((r: any) => ({ ...r, role_name: byId.get(r.role_id)?.name ?? r.role_name }));
     return json({ ok: true, ranks, available_roles: available });
-  } catch (error) { console.error("Rank configuration read error:", String(error)); return json({ error: "No se pudieron cargar los rangos de Discord." }, 502); }
+  } catch (error) { console.error("Rank configuration read error:", String(error)); return json({ error: explainRankConfigFailure(error) }, 502); }
 }
 
 async function importAllRankRoles(req: Request) {
@@ -198,6 +213,7 @@ async function importAllRankRoles(req: Request) {
     const eligible = (guildRoles ?? [])
       .filter((role: any) => String(role.id) !== GUILD_ID && isAssignableRankRole(role))
       .sort((a: any, b: any) => Number(a.position) - Number(b.position) || String(a.name).localeCompare(String(b.name), "es"));
+    if (!eligible.length) return json({ error: "Discord no devolvió rangos asignables. Revisa los permisos del bot y la jerarquía de roles del servidor." }, 409);
     const roleById = new Map(eligible.map((role: any) => [String(role.id), role]));
     const retained = (existing ?? []).filter((rank: any) => roleById.has(String(rank.role_id)));
     const retainedIds = new Set(retained.map((rank: any) => String(rank.role_id)));
@@ -217,7 +233,7 @@ async function importAllRankRoles(req: Request) {
     return json({ ok: true, ranks: result.ranks ?? [], imported_count: orderedIds.length - retained.length });
   } catch (error) {
     console.error("Import all Discord roles error:", String(error));
-    return json({ error: "No se pudieron importar todos los roles de Discord." }, 502);
+    return json({ error: explainRankConfigFailure(error) }, 502);
   }
 }
 
