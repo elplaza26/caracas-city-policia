@@ -136,7 +136,8 @@ async function handle(i:any){
      await publishOrUpdatePanel(APPLICATION_ANNOUNCEMENTS_CHANNEL_ID,"prime_apply",applicationPanel);
      await publishOrUpdatePanel(RANK_REQUEST_CHANNEL_ID,"prime_rank_request",rankPanel);
      await publishOrUpdatePanel(TRANSFER_CHANNEL_ID,"prime_transfer",transferPanel);
-     await editInteractionReply(i,"Paneles de postulación, solicitud de rango y traslado actualizados.");
+     await publishOrUpdatePanel("1539970136302288946","prime_duty_start",{embeds:[{title:"◷ PRIME POLICE · Control de servicio",description:"Registra tu entrada al comenzar el servicio y tu salida al finalizar.",color:6593023,footer:{text:"PRIME POLICE · Bitácoras"}}],components:[{type:1,components:[{type:2,style:3,label:"Entrar en servicio",custom_id:"prime_duty_start"},{type:2,style:4,label:"Salir de servicio",custom_id:"prime_duty_end"}]}]});
+     await editInteractionReply(i,"Paneles de postulaciones, ingreso, traslados y servicio actualizados.");
     }catch(error){
      console.error("Could not publish application announcement:",String(error));
      try{await editInteractionReply(i,"No se pudo publicar el formulario. Comprueba los permisos del bot y vuelve a intentarlo.");}catch(replyError){console.error("Could not update deferred interaction:",String(replyError));}
@@ -150,6 +151,24 @@ async function handle(i:any){
   return ephemeral("Comando no reconocido.");
  }
  if(i.type===3){
+  if(["prime_duty_start","prime_duty_end"].includes(i.data?.custom_id)){
+   EdgeRuntime.waitUntil((async()=>{try{
+    const member=await discord("/guilds/"+GUILD_ID+"/members/"+encodeURIComponent(userId)) as any;
+    if(!(member.roles||[]).includes(POLICE_ROLE_ID)||(member.roles||[]).includes(EXPELLED_ROLE_ID)){await editInteractionReply(i,"Debes tener el rol Policía para registrar servicio.");return;}
+    if(i.data.custom_id==="prime_duty_start"){
+     const profiles=await db("police_personnel?select=full_name,plate,unit&discord_user_id=eq."+encodeURIComponent(userId)+"&status=eq.active&limit=1");
+     const p=profiles?.[0];if(!p||!["UCOP","CIC"].includes(p.unit)){await editInteractionReply(i,"RR. HH. debe completar tu ficha policial antes de registrar servicio.");return;}
+     try{await db("police_duty_shifts",{method:"POST",body:JSON.stringify({discord_user_id:userId,full_name:p.full_name,plate:p.plate||"",unit:p.unit})});}
+     catch(error){if(String(error).includes("409")){await editInteractionReply(i,"Ya tienes una bitácora abierta. Registra la salida antes de volver a entrar.");return;}throw error;}
+     await editInteractionReply(i,"🟢 Entrada registrada. Tu bitácora está abierta.");
+    }else{
+     const now=new Date();const rows=await db("police_duty_shifts?discord_user_id=eq."+encodeURIComponent(userId)+"&ended_at=is.null",{method:"PATCH",body:JSON.stringify({ended_at:now.toISOString(),closed_by:userId,close_reason:"Salida registrada por el agente"})});
+     if(!rows?.length){await editInteractionReply(i,"No tienes una bitácora abierta.");return;}
+     const minutes=Math.max(0,Math.floor((now.getTime()-new Date(rows[0].started_at).getTime())/60000));await editInteractionReply(i,"🔴 Salida registrada. Tiempo de servicio: "+Math.floor(minutes/60)+" h "+minutes%60+" min.");
+    }
+   }catch(error){console.error("Duty interaction:",String(error));await editInteractionReply(i,"No se pudo registrar el servicio. Contacta con RR. HH. y comprueba tu bitácora antes de repetir.");}})());
+   return response(5,{flags:64});
+  }
   if(i.data?.custom_id==="prime_apply")return modal();
   if(i.data?.custom_id==="prime_transfer")return transferModal();
   if(i.data?.custom_id==="prime_rank_request")return rankRequestModal();

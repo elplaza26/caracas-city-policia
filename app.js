@@ -38,13 +38,14 @@ function showApp() {
   $("logoutButton").classList.remove("hidden");
   $("loginView").classList.add("hidden");
   $("appView").classList.remove("hidden");
+  if(typeof loadDashboard==="function")document.querySelector('button[data-view="dashboard"]').click();
 }
 async function request(action, options) {
   options = options || {};
   const headers = {"Content-Type":"application/json"};
   if (token && action !== "login") headers.Authorization = "Bearer " + token;
-  const response = await fetch(API_BASE + "?panel=" + encodeURIComponent(action), {
-    method: options.method || (["data","me","personnel","preselections","rank-config","rank-history","rank-requests","sanctions","transfers"].includes(action) ? "GET" : "POST"),
+  const response = await fetch(API_BASE + "?panel=" + encodeURIComponent(action)+(options.query?"&"+new URLSearchParams(options.query):""), {
+    method: options.method || (["data","me","personnel","preselections","rank-config","rank-history","rank-requests","sanctions","transfers","shifts"].includes(action) ? "GET" : "POST"),
     headers,
     body: options.body ? JSON.stringify(options.body) : undefined
   });
@@ -437,7 +438,7 @@ document.querySelectorAll("#rankRequestStatusTabs .tab").forEach(button=>button.
 document.querySelectorAll("#applicationStatusTabs .tab").forEach(button=>button.addEventListener("click",()=>{activeStatus=button.dataset.status;renderApplications();}));
 $("rankRequestSearch").addEventListener("input",renderRankRequests);
 $("refreshRankRequests").addEventListener("click",loadRankRequests);
-document.querySelectorAll(".workspace-tab").forEach(button=>button.addEventListener("click",()=>{const view=button.dataset.view,apps=view==="applications",rankReq=view==="rank-requests",preselection=view==="preselections",sanctions=view==="sanctions",staff=view==="personnel",ranks=view==="ranks",transfer=view==="transfers";$("sanctionsView").classList.toggle("hidden",!sanctions);$("rankRequestsView").classList.toggle("hidden",!rankReq);$("preselectionsView").classList.toggle("hidden",!preselection);$("personnelView").classList.toggle("hidden",!staff);$("rankView").classList.toggle("hidden",!ranks);$("transfersView").classList.toggle("hidden",!transfer);["applicationsIntro","applicationStats","applicationsToolbar","applicationStatusTabs"].forEach(id=>$(id).classList.toggle("hidden",!apps));$("candidateList").classList.toggle("hidden",!apps);document.querySelectorAll(".workspace-tab").forEach(b=>b.classList.toggle("active",b===button));$("workspaceTitle").textContent=button.dataset.title||button.textContent.trim();if(apps)loadApplications();if(rankReq)loadRankRequests();if(preselection)loadPreselections();if(transfer)loadTransfers();if(sanctions){loadPersonnel();loadSanctions();}if(staff){loadPersonnel();loadRankConfig();}if(ranks){loadRankConfig();loadPersonnel();loadRankHistory();}}));$("discordLoginButton").addEventListener("click", () => {
+document.querySelectorAll(".workspace-tab").forEach(button=>button.addEventListener("click",()=>{const view=button.dataset.view;$("dashboardView").classList.toggle("hidden",view!=="dashboard");$("shiftsView").classList.toggle("hidden",view!=="shifts");if(view==="dashboard")loadDashboard();if(view==="shifts")loadShifts();const apps=view==="applications",rankReq=view==="rank-requests",preselection=view==="preselections",sanctions=view==="sanctions",staff=view==="personnel",ranks=view==="ranks",transfer=view==="transfers";$("sanctionsView").classList.toggle("hidden",!sanctions);$("rankRequestsView").classList.toggle("hidden",!rankReq);$("preselectionsView").classList.toggle("hidden",!preselection);$("personnelView").classList.toggle("hidden",!staff);$("rankView").classList.toggle("hidden",!ranks);$("transfersView").classList.toggle("hidden",!transfer);["applicationsIntro","applicationStats","applicationsToolbar","applicationStatusTabs"].forEach(id=>$(id).classList.toggle("hidden",!apps));$("candidateList").classList.toggle("hidden",!apps);document.querySelectorAll(".workspace-tab").forEach(b=>b.classList.toggle("active",b===button));$("workspaceTitle").textContent=button.dataset.title||button.textContent.trim();if(apps)loadApplications();if(rankReq)loadRankRequests();if(preselection)loadPreselections();if(transfer)loadTransfers();if(sanctions){loadPersonnel();loadSanctions();}if(staff){loadPersonnel();loadRankConfig();}if(ranks){loadRankConfig();loadPersonnel();loadRankHistory();}}));$("discordLoginButton").addEventListener("click", () => {
   $("loginError").textContent = "";
   window.location.assign(API_BASE + "?panel=oauth-start");
 });$("refreshButton").addEventListener("click", loadApplications);

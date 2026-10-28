@@ -538,6 +538,23 @@ async function changeRank(req: Request) {
 }
 
 export async function handleHr(req: Request, action: string): Promise<Response | null> {
+  if (action === "shifts" && req.method === "GET") {
+    const auth = await allowed(req); if (auth.error) return auth.error;
+    try { const offset=Number(new URL(req.url).searchParams.get("offset")||0); if(!Number.isSafeInteger(offset)||offset<0)return json({error:"Página inválida."},400); const shifts=await db("police_duty_shifts?select=*&order=started_at.desc,id.desc&limit=1000&offset="+offset); return json({ ok: true, shifts, next_offset:shifts.length===1000?offset+1000:null }); }
+    catch (error) { console.error("Shifts read:",String(error)); return json({ error: "No se pudieron cargar las bitácoras. Comprueba la migración de turnos." },502); }
+  }
+  if (action === "shift-close" && req.method === "POST") {
+    const auth = await allowed(req); if (auth.error) return auth.error;
+    let body: any; try { body = await req.json(); } catch { return json({error:"Solicitud inválida."},400); }
+    const id=String(body?.id||""), reason=String(body?.reason||"").trim().slice(0,500);
+    if (!/^[0-9a-f-]{36}$/i.test(id)||reason.length<3) return json({error:"Indica la bitácora y el motivo de cierre."},400);
+    try {
+      const rows=await db("police_duty_shifts?id=eq."+enc(id)+"&ended_at=is.null",{method:"PATCH",body:JSON.stringify({ended_at:new Date().toISOString(),closed_by:auth.userId,close_reason:reason})});
+      if(!rows?.length)return json({error:"La bitácora ya estaba cerrada. Actualiza la lista."},409);
+      await postRankAuditLog("◷ Bitácora cerrada por administración",0x6499ff,[{name:"Agente",value:rows[0].full_name},{name:"Cerrada por",value:auth.userId},{name:"Motivo",value:reason}]);
+      return json({ok:true,message:"Bitácora cerrada y registrada."});
+    } catch(error) { console.error("Shift close:",String(error));return json({error:"No se pudo cerrar la bitácora."},502); }
+  }
   if (action === "personnel" && req.method === "GET") return await listPersonnel(req);
   if (action === "preselections" && req.method === "GET") return await listPreselections(req);
   if (action === "personnel-register" && req.method === "POST") return await registerPersonnel(req);
