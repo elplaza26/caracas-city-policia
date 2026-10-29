@@ -35,7 +35,7 @@
 .personnel-heading{align-items:flex-start;margin:4px 0 18px}.personnel-heading h2,.personnel-list-heading h2{font-size:22px;margin:3px 0}.personnel-heading .muted{margin:4px 0 0}.personnel-heading-actions{display:flex;align-items:center;gap:10px}.personnel-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:14px 0 20px}.personnel-stats .stat{padding:12px 16px}.personnel-stats .stat strong{font-size:24px}.personnel-filters{display:grid;grid-template-columns:minmax(260px,2fr) minmax(180px,1fr) minmax(150px,1fr);gap:10px;margin:0 0 14px}.personnel-filters .search{max-width:none;min-width:0}.personnel-list-heading{margin:22px 0 12px}.personnel-list-heading .muted{font-size:12px}.personnel-table{min-width:1050px}.personnel-table tbody tr:hover{background:#18211b}.personnel-table td{vertical-align:middle}.personnel-status{display:inline-flex;padding:4px 8px;border-radius:999px;font-size:10px;font-weight:800}.personnel-status.is-active{background:#153329;color:#8de4bd}.personnel-status.is-inactive{background:#302818;color:#f5d68c}.personnel-actions{display:flex;gap:6px;flex-wrap:wrap}.personnel-actions .btn{padding:6px 9px;font-size:11px;white-space:nowrap}.personnel-form-actions{display:flex;gap:8px;align-items:center}.personnel-form-actions #personnelButton{min-width:145px}@media(max-width:850px){.personnel-filters{grid-template-columns:1fr 1fr}.personnel-filters .search:first-child{grid-column:1/-1}}@media(max-width:560px){.personnel-heading-actions{width:100%;justify-content:space-between}.personnel-stats{gap:7px}.personnel-stats .stat{padding:10px}.personnel-stats .stat span{font-size:10px}.personnel-stats .stat strong{font-size:20px}.personnel-filters{grid-template-columns:1fr}.personnel-filters .search:first-child{grid-column:auto}.personnel-form-actions{flex-wrap:wrap}}
 </style>
 <style>.rank-entry{flex-wrap:wrap;gap:12px}.rank-entry>strong{flex:1;min-width:180px}.rank-days-control{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:11px}.rank-days-control input{width:78px;padding:7px 8px;border:1px solid var(--line);border-radius:8px;background:#0d110e;color:var(--text)}#rankEligibleList .candidate{padding:13px 16px}</style>
-<link rel="stylesheet" href="admin.css?v=20261029-edit-intake"></head>
+<link rel="stylesheet" href="admin.css?v=20261029-shift-admin"></head>
 <body>
 <main class="shell">
   <aside class="sidebar">
@@ -197,6 +197,21 @@
   </section>
 </div>
 <dialog id="intakeEditDialog" class="intake-edit-dialog" aria-labelledby="intakeEditTitle"><div class="cardhead"><h2 id="intakeEditTitle">Corregir datos de nuevo ingreso</h2><button id="closeIntakeEdit" type="button" class="btn" aria-label="Cerrar">✕</button></div><form id="intakeEditForm"><p id="intakeEditNote" class="muted"></p><div class="personnel-fields"><div class="field"><label for="intakeEditDiscord">Usuario de Discord</label><input id="intakeEditDiscord" readonly></div><div class="field"><label for="intakeEditName">Nombre IC</label><input id="intakeEditName" maxlength="100" required></div><div class="field"><label for="intakeEditPlate">Número de placa</label><input id="intakeEditPlate" maxlength="30" required></div><div class="field"><label for="intakeEditSteam">Usuario de Steam</label><input id="intakeEditSteam" maxlength="100"></div><div class="field"><label for="intakeEditApprover">Entrevista aprobada por</label><input id="intakeEditApprover" maxlength="100" required></div></div><p id="intakeEditFeedback" role="status" aria-live="polite"></p><div class="personnel-form-actions"><button id="saveIntakeEdit" class="btn primary" type="submit">Guardar corrección</button><button id="cancelIntakeEdit" class="btn" type="button">Cancelar</button></div></form></dialog>
-<script src="app.js?v=20261029-edit-intake" defer></script><script src="shifts.js?v=20261029-sin-rama" defer></script><script src="pending-changes.js?v=20261029-edit-intake" defer></script>
+<dialog id="shiftAdminDialog" class="intake-edit-dialog shift-admin-dialog" aria-labelledby="shiftAdminTitle">
+ <div class="cardhead"><h2 id="shiftAdminTitle">Forzar cierre de bitácora</h2><button id="shiftAdminX" type="button" class="btn" aria-label="Cerrar">✕</button></div>
+ <form id="shiftAdminForm">
+  <p id="shiftAdminAgent"></p><p id="shiftAdminPolicy" class="notice"></p>
+  <div id="shiftAdminTimes">
+   <div class="personnel-fields"><div class="field"><label for="shiftEntryDate">Fecha de entrada</label><input type="date" id="shiftEntryDate" required></div><div class="field"><label for="shiftEntryTime">Hora de entrada</label><input type="time" id="shiftEntryTime" step="1" required></div></div>
+   <fieldset class="shift-day-choice"><legend>¿Cuándo terminó el turno?</legend><label><input type="radio" name="shiftExitDay" value="same"> Mismo día</label><label><input type="radio" name="shiftExitDay" value="next"> Día siguiente (madrugada)</label><label><input type="radio" name="shiftExitDay" value="custom"> Otra fecha</label></fieldset>
+   <div class="personnel-fields"><div class="field"><label for="shiftExitDate">Fecha de salida</label><input type="date" id="shiftExitDate" required></div><div class="field"><label for="shiftExitTime">Hora de salida</label><input type="time" id="shiftExitTime" step="1" required></div></div>
+   <button id="shiftCloseNow" class="btn primary" type="button">Cerrar ahora</button><p id="shiftAdminDuration" class="muted"></p>
+  </div>
+  <div class="field"><label for="shiftAdminReason">Motivo</label><textarea id="shiftAdminReason" minlength="3" maxlength="500" rows="3" required placeholder="Indica por qué se cierra o elimina esta bitácora."></textarea></div>
+  <p id="shiftAdminFeedback" role="status" aria-live="polite"></p>
+  <div class="personnel-form-actions"><button id="shiftAdminSave" type="submit" class="btn primary">Guardar cierre</button><button id="shiftAdminCancel" type="button" class="btn">Cancelar</button></div>
+ </form>
+</dialog>
+<script src="app.js?v=20261029-edit-intake" defer></script><script src="shifts.js?v=20261029-shift-admin" defer></script><script src="shifts-actions.js?v=20261029-shift-admin" defer></script><script src="pending-changes.js?v=20261029-shift-admin" defer></script>
 <script src="intake-editor.js?v=20261029" defer></script></body>
 </html>

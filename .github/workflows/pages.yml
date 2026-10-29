@@ -23,6 +23,7 @@ jobs:
         run: |
           node --check app.js
           node --check shifts.js
+          node --check shifts-actions.js
           node --check pending-changes.js
           node --check intake-editor.js
       - name: Check Edge Function types and variable scope

@@ -1,8 +1,9 @@
 let pendingChangeStatus='pending',pendingChangeOffset=0,pendingChangeSequence=0;
-const changeLabels={'personnel-register':'Editar o registrar personal','personnel-delete':'Eliminar ficha de personal','rank-change':'Ascenso o descenso','rank-config-save':'Modificar escala de rangos','rank-config-import-all':'Sincronizar escala de rangos','decision':'Resolver postulación','transfer-decision':'Resolver traslado','rank-request-review':'Resolver nuevo ingreso','rank-request-edit':'Corregir datos de nuevo ingreso','sanction':'Aplicar sanción','sanction-delete':'Eliminar sanción','nickname-sync':'Sincronizar nombre y placa','shift-close':'Cerrar bitácora'};
-const changeFieldLabels={character_name:"Nombre IC",steam_username:"Usuario de Steam",approved_by_name:"Entrevista aprobada por",record_action:'Operación sobre la ficha',discord_user_id:'Usuario de Discord',full_name:'Nombre completo',name_ooc:'Nombre OOC',plate:'Placa',unit:'Rama',rank_role_id:'Rango',role_ids:'Escala de rangos',minimum_days_by_role:'Días mínimos por rango',action_type:'Tipo de movimiento',effective_date:'Fecha efectiva',reason:'Motivo',target_name:'Agente',evidence_url:'Evidencia',action:'Decisión',decision:'Decisión'};
+const changeLabels={'personnel-register':'Editar o registrar personal','personnel-delete':'Eliminar ficha de personal','rank-change':'Ascenso o descenso','rank-config-save':'Modificar escala de rangos','rank-config-import-all':'Sincronizar escala de rangos','decision':'Resolver postulación','transfer-decision':'Resolver traslado','rank-request-review':'Resolver nuevo ingreso','rank-request-edit':'Corregir datos de nuevo ingreso','sanction':'Aplicar sanción','sanction-delete':'Eliminar sanción','nickname-sync':'Sincronizar nombre y placa','shift-close':'Cerrar bitácora','shift-delete':'Eliminar bitácora'};
+const changeFieldLabels={started_at:"Fecha y hora de entrada",ended_at:"Fecha y hora de salida",character_name:"Nombre IC",steam_username:"Usuario de Steam",approved_by_name:"Entrevista aprobada por",record_action:'Operación sobre la ficha',discord_user_id:'Usuario de Discord',full_name:'Nombre completo',name_ooc:'Nombre OOC',plate:'Placa',unit:'Rama',rank_role_id:'Rango',role_ids:'Escala de rangos',minimum_days_by_role:'Días mínimos por rango',action_type:'Tipo de movimiento',effective_date:'Fecha efectiva',reason:'Motivo',target_name:'Agente',evidence_url:'Evidencia',action:'Decisión',decision:'Decisión'};
 const changeValueLabels={POLICIA:"Sin rama · Policía",create:'Registrar nuevo agente',update:'Editar agente',accept:'Aceptar',reject:'Rechazar',promotion:'Ascenso',demotion:'Descenso',assignment:'Asignación inicial',warning:'Warning',strike:'Strike'};
 function changeValue(value,item){
+ if(typeof value==='string'&&/^\d{4}-\d{2}-\d{2}T/.test(value))return niceDate(value);
  const ranks=item.before_state?.ranks||item.before_state?.available_roles||[];
  const roleName=id=>ranks.find(r=>String(r.role_id||r.id)===String(id))?.role_name||ranks.find(r=>String(r.id)===String(id))?.name||String(id);
  if(Array.isArray(value))return value.map(roleName).join(' → ');
@@ -27,8 +28,9 @@ async function loadPendingChanges(){
    const status=document.createElement('p');status.setAttribute('role','status');status.textContent=({pending:'Pendiente de Directiva',processing:'Procesando; no repetir',approved:'Aprobado y aplicado',rejected:'Rechazado',failed:'No aplicado; revisar motivo'})[item.status]||item.status;
    card.append(title,meta,status);
    const fields=document.createElement('div');fields.className='details';
+   if(item.action==='shift-delete'){fields.append(detail('Placa',record.plate||'—'),detail('Entrada',niceDate(record.started_at)),detail('Salida',record.ended_at?niceDate(record.ended_at):'En servicio'));}
    for(const [key,value]of Object.entries(item.payload||{})){
-    if(key==='id'||key==='discord_user_id'||key==='expected_updated_at')continue;
+    if(key==='id'||key==='discord_user_id'||key==='expected_updated_at'||key==='expected_started_at'||key==='expected_ended_at')continue;
     const previous=record[key],oldValue=previous!==undefined&&JSON.stringify(previous)!==JSON.stringify(value)?changeValue(previous,item)+' → ':'';
     fields.append(detail(changeFieldLabels[key]||key,oldValue+changeValue(value,item)));
    }

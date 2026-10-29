@@ -673,17 +673,32 @@ export async function handleHr(req: Request, action: string): Promise<Response |
       const shifts=await db("police_duty_shifts?select=*&order=started_at.desc,id.desc&limit=51&offset="+offset+filter);return json({ok:true,shifts:shifts.slice(0,50),next_offset:shifts.length>50?offset+50:null}); }
     catch (error) { console.error("Shifts read:",String(error)); return json({ error: "No se pudieron cargar las bitácoras. Comprueba la migración de turnos." },502); }
   }
-  if (action === "shift-close" && req.method === "POST") {
+  if ((action === "shift-close" || action === "shift-delete") && req.method === "POST") {
     const auth = await allowed(req); if (auth.error) return auth.error;
     let body: any; try { body = await req.json(); } catch { return json({error:"Solicitud inválida."},400); }
     const id=String(body?.id||""), reason=String(body?.reason||"").trim().slice(0,500);
-    if (!/^[0-9a-f-]{36}$/i.test(id)||reason.length<3) return json({error:"Indica la bitácora y el motivo de cierre."},400);
+    if (!/^[0-9a-f-]{36}$/i.test(id)||reason.length<3) return json({error:"Indica la bitácora y un motivo de al menos 3 caracteres."},400);
     try {
-      const rows=await db("police_duty_shifts?id=eq."+enc(id)+"&ended_at=is.null",{method:"PATCH",body:JSON.stringify({ended_at:new Date().toISOString(),closed_by:auth.userId,close_reason:reason})});
+      const found=await db("police_duty_shifts?select=*&id=eq."+enc(id)+"&limit=1");
+      const current=found?.[0];if(!current)return json({error:"La bitácora ya no existe. Actualiza la lista."},404);
+      if ((body.expected_started_at!==undefined&&String(body.expected_started_at)!==String(current.started_at)) || (body.expected_ended_at!==undefined&&String(body.expected_ended_at??"")!==String(current.ended_at??""))) return json({error:"La bitácora cambió desde que la abriste. Actualiza la lista."},409);
+      const unchanged="&started_at=eq."+enc(current.started_at)+(current.ended_at?"&ended_at=eq."+enc(current.ended_at):"&ended_at=is.null");
+      if(action==="shift-delete"){
+        // Keep a private backup before removing the record from service totals.
+        await db("police_audit_events",{method:"POST",body:JSON.stringify({action:"Respaldo de bitácora antes de eliminar",fields:[{name:"Agente",value:current.full_name},{name:"Gestor",value:auth.userId},{name:"Motivo",value:reason},{name:"Registro original",value:JSON.stringify(current)}]})});
+        const removed=await db("police_duty_shifts?id=eq."+enc(id)+unchanged,{method:"DELETE"});
+        if(!removed?.length)return json({error:"La bitácora cambió durante la eliminación. Actualiza la lista."},409);
+        await postRankAuditLog("🗑️ Bitácora eliminada por administración",0xe87979,[{name:"Agente",value:current.full_name},{name:"Placa",value:current.plate||"—"},{name:"Eliminada por",value:auth.userId},{name:"Motivo",value:reason},{name:"Bitácora",value:id}]);
+        return json({ok:true,message:"Bitácora eliminada. El registro original se conserva en la auditoría y sus horas ya no cuentan en los totales."});
+      }
+      if(current.ended_at)return json({error:"La bitácora ya estaba cerrada. Actualiza la lista."},409);
+      const start=new Date(body.started_at??current.started_at),end=new Date(body.ended_at??Date.now());
+      if(!Number.isFinite(start.getTime())||!Number.isFinite(end.getTime())||end<start||end.getTime()>Date.now()+60000)return json({error:"Revisa las fechas: la salida debe ser posterior a la entrada y no puede estar en el futuro."},400);
+      const rows=await db("police_duty_shifts?id=eq."+enc(id)+unchanged,{method:"PATCH",body:JSON.stringify({started_at:start.toISOString(),ended_at:end.toISOString(),closed_by:auth.userId,close_reason:reason})});
       if(!rows?.length)return json({error:"La bitácora ya estaba cerrada. Actualiza la lista."},409);
-      await postRankAuditLog("◷ Bitácora cerrada por administración",0x6499ff,[{name:"Agente",value:rows[0].full_name},{name:"Cerrada por",value:auth.userId},{name:"Motivo",value:reason}]);
+      await postRankAuditLog("◷ Bitácora cerrada por administración",0x6499ff,[{name:"Agente",value:rows[0].full_name},{name:"Cerrada por",value:auth.userId},{name:"Entrada original",value:current.started_at},{name:"Entrada corregida",value:start.toISOString()},{name:"Salida",value:end.toISOString()},{name:"Motivo",value:reason}]);
       return json({ok:true,message:"Bitácora cerrada y registrada."});
-    } catch(error) { console.error("Shift close:",String(error));return json({error:"No se pudo cerrar la bitácora."},502); }
+    } catch(error) { console.error("Shift administration:",String(error));return json({error:action==="shift-delete"?"No se pudo eliminar la bitácora. Actualiza la lista antes de reintentar.":"No se pudo cerrar la bitácora. Actualiza la lista antes de reintentar."},502); }
   }
   if (action === "personnel" && req.method === "GET") return await listPersonnel(req);
   if (action === "preselections" && req.method === "GET") return await listPreselections(req);

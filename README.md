@@ -13,6 +13,8 @@ Panel privado de gestión de personal de PRIME POLICE, orientado a UCOP y RR. HH
 
 ## Acceso y datos
 
+En Bitácoras, Forzar cierre permite corregir la entrada e indicar la salida real en horario local (mismo día, día siguiente u otra fecha), o completar la salida con Cerrar ahora. Eliminar está disponible en turnos abiertos y completados; requiere motivo y conserva un respaldo privado del registro en la auditoría antes de retirarlo de los totales. UCOP prepara estas operaciones y Directiva las aprueba desde Pendientes. Directiva puede aplicarlas directamente. La migración `20261029131718_police_shift_admin_delete.sql` concede al servidor el permiso necesario para eliminar bitácoras; los clientes públicos siguen sin acceso a la tabla.
+
 Al aceptar una postulación o un traslado, el panel asigna el rol correspondiente y pone el nombre IC de la solicitud como apodo de Discord, sin placa. El ingreso posterior como Policía sigue utilizando Nombre IC #placa. Si Discord impide cambiar el apodo (por ejemplo, al propietario del servidor), la aceptación se conserva y el panel muestra una advertencia. Este cambio se aplica a las nuevas aceptaciones; no modifica solicitudes antiguas automáticamente.
 
 El inicio de sesión se hace con Discord. Solo pueden entrar integrantes que tengan al menos uno de los roles gestores configurados en `prime-police-panel/index.ts` y `prime-police-panel/hr.ts`. Las funciones validan la sesión y los roles en el servidor antes de cada operación. Las tablas usan RLS y las funciones acceden a ellas con la clave privada de servicio.
