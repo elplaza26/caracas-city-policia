@@ -18,7 +18,7 @@ async function loadPendingChanges(){
   if(sequence!==pendingChangeSequence)return;box.replaceChildren();
   const legacy=(legacyResult.authorizations||[]).filter(r=>pendingChangeStatus==='pending'?['pending','processing'].includes(r.status):!['pending','processing'].includes(r.status)).map(r=>({...r,legacy:true,action:'rank-change',requested_by_name:r.requested_by,payload:{full_name:r.full_name,rank_role_id:r.new_rank_name},before_state:{}}));
   const rows=[...(result.requests||[]),...legacy];
-  if(!rows.length){box.textContent=pendingChangeStatus==='pending'?'No hay cambios pendientes de Directiva.':'Todavía no hay decisiones registradas.';}
+  if(!rows.length){const empty=document.createElement('div');empty.className='dashboard-inbox-empty';const icon=document.createElement('span');icon.className='dashboard-empty-check';icon.setAttribute('aria-hidden','true');icon.textContent=pendingChangeStatus==='pending'?'✓':'↗';const title=document.createElement('strong');title.textContent=pendingChangeStatus==='pending'?'Todo al día':'Sin decisiones registradas';const copy=document.createElement('p');copy.textContent=pendingChangeStatus==='pending'?'No hay propuestas pendientes de Directiva. Los nuevos cambios aparecerán aquí.':'Aquí podrás consultar las decisiones y el resultado de cada cambio.';empty.append(icon,title,copy);box.append(empty);}
   for(const item of rows){
    const card=document.createElement('article');card.className='candidate';
    const title=document.createElement('h3');title.textContent=changeLabels[item.action]||'Cambio administrativo';
@@ -47,7 +47,7 @@ async function loadPendingChanges(){
     }card.append(actions);
    }box.append(card);
   }
-  const pagination=document.createElement('div');pagination.className='toolbar';for(const [label,next,disabled]of [['Anterior',Math.max(0,pendingChangeOffset-25),pendingChangeOffset===0],['Siguiente',result.next_offset,result.next_offset==null]]){const b=document.createElement('button');b.className='btn';b.type='button';b.textContent=label;b.disabled=disabled;b.addEventListener('click',()=>{pendingChangeOffset=next;loadPendingChanges();});pagination.append(b);}box.append(pagination);
+  const pagination=document.createElement('div');pagination.className='toolbar';for(const [label,next,disabled]of [['Anterior',Math.max(0,pendingChangeOffset-25),pendingChangeOffset===0],['Siguiente',result.next_offset,result.next_offset==null]]){const b=document.createElement('button');b.className='btn';b.type='button';b.textContent=label;b.disabled=disabled;b.addEventListener('click',()=>{pendingChangeOffset=next;loadPendingChanges();});pagination.append(b);}if(pendingChangeOffset>0||result.next_offset!=null)box.append(pagination);
  }catch(e){if(sequence===pendingChangeSequence)box.textContent=e.message;}
 }
 $('refreshPendingChanges').addEventListener('click',loadPendingChanges);
