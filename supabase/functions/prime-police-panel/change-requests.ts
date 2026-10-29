@@ -88,7 +88,7 @@ export async function interceptChanges(req:Request,action:string,c:Context):Prom
    }
   });
  }
- if(isDirector)return null;
+ if(isDirector||((action==='shift-close'||action==='shift-delete')&&(member.roles||[]).includes('1539970134519578773')))return null;
  try{
   const before=await snapshot(action,payload,c);
   const rows=await c.db('police_change_requests',{method:'POST',body:JSON.stringify({action,resource_key:before.resource,requested_by:actor,requested_by_name:actorName,payload,before_state:before.state,fingerprint:await fingerprint(before.state)})});

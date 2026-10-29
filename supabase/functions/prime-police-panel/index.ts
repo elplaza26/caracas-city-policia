@@ -587,7 +587,7 @@ async function routePanel(req: Request): Promise<Response> {
       commands_status: "managed_separately",
       configured: { discord: Boolean(BOT_TOKEN), database: Boolean(SUPABASE_URL && SERVICE_KEY), discord_oauth: Boolean(DISCORD_OAUTH_CLIENT_SECRET) },
 
-      version: "shift-admin-controls-2026-10-29d",
+      version: "ucop-direct-shifts-2026-10-29e",
     });
   }
   return json({ error: "Método no permitido." }, 405);
@@ -664,7 +664,7 @@ async function currentUser(req: Request) {
       : "https://cdn.discordapp.com/embed/avatars/" + String(Number((BigInt(userId) >> 22n) % 6n)) + ".png";
     const roles: string[] = member?.roles ?? [];
     const accessRoles = roles.filter((role) => MANAGER_ROLE_IDS.has(role)).map((role) => MANAGER_ROLE_LABELS.get(role) ?? "Gestión autorizada");
-    return json({ user: { id: userId, username, display_name: displayName, avatar_url: avatarUrl, access_roles: accessRoles, can_authorize_promotions: roles.some((id:string)=>["1539970134565982313","1539970134544748562","1539970134519578774"].includes(id)) } });
+    return json({ user: { id: userId, username, display_name: displayName, avatar_url: avatarUrl, access_roles: accessRoles, can_manage_shifts_direct: roles.some((id:string)=>["1539970134565982313","1539970134544748562","1539970134519578774","1539970134519578773"].includes(id)), can_authorize_promotions: roles.some((id:string)=>["1539970134565982313","1539970134544748562","1539970134519578774"].includes(id)) } });
   } catch (e) {
     console.error("Discord profile lookup failed:", String(e));
     return json({ error: "No se pudo cargar tu perfil de Discord." }, 502);

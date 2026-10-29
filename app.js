@@ -16,6 +16,7 @@ let availableRoles = [];
 let rankConfigError = "";
 let toastTimer;
 let canAuthorizePromotions=false;
+let canManageShiftsDirect=false;
 
 const $ = (id) => document.getElementById(id);
 function showToast(message) {
@@ -26,6 +27,7 @@ function showToast(message) {
 }
 function showLogin() {
   token = "";
+  canAuthorizePromotions=false;canManageShiftsDirect=false;
   $("sideNav").classList.add("hidden");
   $("accountCard").classList.add("hidden");
   $("logoutButton").classList.add("hidden");
@@ -73,7 +75,8 @@ async function loadAccountProfile() {
     const result = await request("me", {method:"GET"});
     const user = result.user || {};
     canAuthorizePromotions=Boolean(user.can_authorize_promotions);
-    $('managementPolicy').textContent=canAuthorizePromotions?'Directiva: puedes aplicar cambios y revisar las propuestas del panel principal.':'Puedes preparar cualquier cambio. Quedará pendiente en el panel principal hasta que Directiva lo apruebe.';
+    canManageShiftsDirect=Boolean(user.can_manage_shifts_direct);
+    $('managementPolicy').textContent=canAuthorizePromotions?'Directiva: puedes aplicar cambios y revisar las propuestas del panel principal.':canManageShiftsDirect?'UCOP: puedes cerrar y eliminar bitácoras directamente. Los demás cambios requieren aprobación de Directiva.':'Puedes preparar cualquier cambio. Quedará pendiente en el panel principal hasta que Directiva lo apruebe.';
     $("accountName").textContent = user.display_name || user.username || "Cuenta Discord";
     $("accountId").textContent = (user.username ? "@" + user.username + " · " : "") + "ID " + (user.id || "—");
     const accessRoles = Array.isArray(user.access_roles) ? user.access_roles : [];

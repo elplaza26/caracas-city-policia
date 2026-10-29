@@ -21,15 +21,15 @@ function shiftUpdateDuration(){
 function shiftSetNow(){const now=new Date();$('shiftExitDate').value=shiftDateValue(now);$('shiftExitTime').value=shiftClockValue(now);shiftDayMode();shiftUpdateDuration();}
 function openShiftAdmin(item,mode){
  if(shiftAdminSaving)return;shiftAdminItem={...item};shiftAdminMode=mode;
- const removing=mode==='delete',start=new Date(item.started_at);
+ const removing=mode==='delete',start=new Date(item.started_at),direct=canAuthorizePromotions||canManageShiftsDirect;
  $('shiftAdminTitle').textContent=removing?'Eliminar bitácora':'Forzar cierre de bitácora';
  $('shiftAdminAgent').textContent=item.full_name+' · Placa '+(item.plate||'—')+' · Entrada: '+shiftTime(item.started_at);
- $('shiftAdminPolicy').textContent=(canAuthorizePromotions?'Directiva: el cambio se aplicará al confirmar.':'Se creará una petición para Directiva. El registro solo cambiará cuando la apruebe.')+(removing?' Al eliminarla, sus horas dejarán de contar. Se conservará una copia en la auditoría.':'');
+ $('shiftAdminPolicy').textContent=(direct?'Puedes aplicar este cambio directamente. Se registrará en la auditoría.':'Se creará una petición para Directiva. El registro solo cambiará cuando la apruebe.')+(removing?' Al eliminarla, sus horas dejarán de contar. Se conservará una copia en la auditoría.':'');
  $('shiftAdminTimes').hidden=removing;
  ['shiftEntryDate','shiftEntryTime','shiftExitDate','shiftExitTime'].forEach(id=>{$(id).disabled=removing;});
  $('shiftEntryDate').value=shiftDateValue(start);$('shiftEntryTime').value=shiftClockValue(start);shiftSetNow();
  $('shiftAdminReason').value='';$('shiftAdminFeedback').textContent='';
- $('shiftAdminSave').textContent=canAuthorizePromotions?(removing?'Eliminar bitácora':'Guardar cierre'):'Enviar petición';
+ $('shiftAdminSave').textContent=direct?(removing?'Eliminar bitácora':'Guardar cierre'):'Enviar petición';
  $('shiftAdminSave').className='btn '+(removing?'reject':'primary');
  $('shiftAdminDialog').showModal();
 }
