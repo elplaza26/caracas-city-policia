@@ -327,6 +327,22 @@ async function listTransfers(req: Request) {
   }
 }
 
+async function setCandidateNickname(userId: string, fullName: unknown): Promise<string> {
+  const name = String(fullName ?? "").split(/\r?\n|\|/)[0]
+    .replace(/^nombre\s*(?:ic)?\s*:\s*/i, "").replace(/\s+/g, " ").trim();
+  if (!name) return "La solicitud se aceptó, pero no tiene un nombre IC válido para cambiar el apodo.";
+  try {
+    await discord("/guilds/" + GUILD_ID + "/members/" + encodeURIComponent(userId), {
+      method: "PATCH", body: JSON.stringify({ nick: Array.from(name).slice(0, 32).join("") }),
+      headers: { "X-Audit-Log-Reason": "PRIME POLICE: nombre IC al aceptar candidatura o traslado" },
+    });
+    return "";
+  } catch (error) {
+    console.error("Candidate nickname update failed:", userId, String(error));
+    return "La solicitud se aceptó, pero no se pudo cambiar el apodo en Discord. Comprueba que el bot tenga Gestionar apodos y un rol superior al de la persona. El propietario del servidor debe cambiar su apodo manualmente.";
+  }
+}
+
 async function decideTransfer(req: Request) {
   const reviewerId = await authorizedUser(req);
   if (!reviewerId) return json({ error: "Sesión caducada o sin permisos de gestión." }, 403);
@@ -355,6 +371,7 @@ async function decideTransfer(req: Request) {
     const now = new Date().toISOString();
     const updated = await db("police_transfer_applications?id=eq." + encodeURIComponent(id) + "&status=eq.pending", { method: "PATCH", body: JSON.stringify({ status: action === "accept" ? "accepted" : "rejected", decision_reason: reason, reviewed_by_discord_id: reviewerId, reviewed_by_name: reviewerName, reviewed_at: now, ...(action === "accept" ? { role_assigned_at: now } : {}) }) });
     if (!updated?.length) return json({ error: "La solicitud cambió durante la revisión. Actualiza la lista." }, 409);
+    const nicknameWarning = action === "accept" ? await setCandidateNickname(String(item.discord_user_id), item.full_name) : "";
     await postAuditLog(action === "accept" ? "✅ Traslado aceptado" : "❌ Traslado rechazado", action === "accept" ? 0x45b879 : 0xe87979, [
       { name: "Agente", value: String(item.full_name || item.discord_username) },
       { name: "Procedencia", value: String(item.source_city) + " · " + String(item.source_faction) },
@@ -371,7 +388,7 @@ async function decideTransfer(req: Request) {
       await sendPrivateDiscordMessage(String(item.discord_user_id), { embeds: [{ title: accepted ? "🚔 Traslado aceptado · PRIME POLICE" : "📋 Resultado de solicitud de traslado", description, color: accepted ? 0x45b879 : 0xd5ad5a }] });
       notified = true;
     } catch (e) { console.error("Private transfer result DM failed:", String(e)); }
-    return json({ ok: true, status: updated[0].status, role_assigned: action === "accept", results_notified: notified, warning: notified ? undefined : "La decisión se guardó, pero no se pudo enviar el resultado por privado. Comprueba que la persona permita mensajes directos." });
+    return json({ ok: true, status: updated[0].status, role_assigned: action === "accept", nickname_updated: action === "accept" ? !nicknameWarning : undefined, results_notified: notified, warning: [nicknameWarning, notified ? "" : "La decisión se guardó, pero no se pudo enviar el resultado por privado. Comprueba que la persona permita mensajes directos."].filter(Boolean).join(" ") || undefined });
   } catch (e) {
     console.error("Transfer decision error:", String(e));
     return json({ error: "No se pudo guardar la decisión." }, 500);
@@ -395,6 +412,7 @@ async function decide(req: Request) {
   let finalApp: any;
   let preselectionSynced = true;
   let isNewDecision = false;
+  let nicknameWarning = "";
   try {
     const rows = await db(
       "police_applications?select=*&id=eq." + encodeURIComponent(id) + "&limit=1",
@@ -467,6 +485,7 @@ async function decide(req: Request) {
     }
     finalApp = updated[0];
     if (action === "accept") {
+      nicknameWarning = await setCandidateNickname(String(app.discord_user_id), app.full_name);
       try {
         await db("police_preselections?on_conflict=discord_user_id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify({ discord_user_id: String(app.discord_user_id), discord_username: String(app.discord_username ?? ""), full_name: String(app.full_name ?? ""), source_application_id: app.id, status: "active", accepted_at: finalApp.reviewed_at ?? new Date().toISOString(), updated_at: new Date().toISOString() }) });
       } catch (e) { preselectionSynced = false; console.error("Preselection record creation failed:", String(e)); }
@@ -531,10 +550,11 @@ async function decide(req: Request) {
     ok: true,
     status: finalApp.status,
     role_assigned: action === "accept" && Boolean(finalApp.role_assigned_at),
+    nickname_updated: action === "accept" ? !nicknameWarning : undefined,
     results_notified: resultsNotified,
-    warning: !preselectionSynced
+    warning: [nicknameWarning, !preselectionSynced
       ? "La candidatura se aceptó, pero no se guardó en la base de preseleccionados. Avísale a un administrador para revisar el registro."
-      : resultsNotified ? undefined : "La decisión se guardó, pero no se pudo enviar por privado. Comprueba que la persona permita mensajes directos.",
+      : "", resultsNotified ? "" : "La decisión se guardó, pero no se pudo enviar por privado. Comprueba que la persona permita mensajes directos."].filter(Boolean).join(" ") || undefined,
   });
 }
 
@@ -567,7 +587,7 @@ async function routePanel(req: Request): Promise<Response> {
       commands_status: "managed_separately",
       configured: { discord: Boolean(BOT_TOKEN), database: Boolean(SUPABASE_URL && SERVICE_KEY), discord_oauth: Boolean(DISCORD_OAUTH_CLIENT_SECRET) },
 
-      version: "editable-intake-2026-10-29b",
+      version: "candidate-ic-nickname-2026-10-29c",
     });
   }
   return json({ error: "Método no permitido." }, 405);
