@@ -1,3 +1,4 @@
+import { manageAbsences } from "./absences.ts";
 import { listPagedRecords } from "./paged-records.ts";
 import { createPanelSession, authenticatePanelSession, sessionRoutes, rateLimitRequest } from "./panel-sessions.ts";
 import { discordRequest, discordFailure } from "./discord-client.ts";
@@ -539,6 +540,7 @@ async function routePanel(req: Request): Promise<Response> {
   if (action === "oauth-callback" && req.method === "GET") return await finishDiscordOAuth(req);
   if (action === "login" && req.method === "POST") return await login(req);
   if (action === "me" && req.method === "GET") return await currentUser(req);
+  if(['absence-summary','absence-review','absence-roster','absence-register'].includes(action||'')){const actor=await authorizedUser(req);if(!actor)return json({error:'Sesión caducada o sin permisos de gestión.'},403);return manageAbsences(req,action,actor,{db,json,notify:sendPrivateDiscordMessage,audit:postAuditLog});}
   if (action === "records") { if(!await authorizedUser(req))return json({error:'Sesión caducada o sin permisos de gestión.'},403);return listPagedRecords(req,json); }
   if (action === "data" && req.method === "GET") return await listApplications(req);
   if (action === "decision" && req.method === "POST") return await decide(req);
@@ -559,7 +561,7 @@ async function routePanel(req: Request): Promise<Response> {
       commands_status: "managed_separately",
       configured: { discord: Boolean(BOT_TOKEN), database: Boolean(SUPABASE_URL && SERVICE_KEY), discord_oauth: Boolean(DISCORD_OAUTH_CLIENT_SECRET) },
 
-      version: "secure-app-sessions-2026-10-29f",
+      version: "absence-tracking-2026-10-29g",
     });
   }
   return json({ error: "Método no permitido." }, 405);
@@ -567,12 +569,12 @@ async function routePanel(req: Request): Promise<Response> {
 }
 async function dispatchWithLocks(req:Request):Promise<Response>{
  const action=new URL(req.url).searchParams.get("panel")||"";
- const guarded=["rank-change","personnel-register","rank-request-review","rank-request-edit","rank-authorization-review","decision","transfer-decision","sanction","sanction-delete","nickname-sync","personnel-delete","shift-close","shift-delete","rank-config-save","rank-config-import-all"];
+ const guarded=["rank-change","personnel-register","rank-request-review","rank-request-edit","rank-authorization-review","decision","transfer-decision","sanction","sanction-delete","nickname-sync","personnel-delete","shift-close","shift-delete","absence-review","absence-register","rank-config-save","rank-config-import-all"];
  if(req.method!=="POST"||!guarded.includes(action))return routePanel(req);
  try{
   if(!await authenticate(req))return json({error:"La sesión caducó. Entra nuevamente con Discord."},401);
   const body=await req.clone().json();let target=String(body.discord_user_id||"");
-  const lookups:Record<string,[string,string]>={decision:["police_applications","discord_user_id"],"transfer-decision":["police_transfer_applications","discord_user_id"],"rank-request-review":["police_rank_requests","discord_user_id"],"rank-request-edit":["police_rank_requests","discord_user_id"],"rank-authorization-review":["police_rank_authorizations","target_id"],"sanction-delete":["police_sanctions","discord_user_id"],"shift-close":["police_duty_shifts","discord_user_id"],"shift-delete":["police_duty_shifts","discord_user_id"]};
+  const lookups:Record<string,[string,string]>={decision:["police_applications","discord_user_id"],"transfer-decision":["police_transfer_applications","discord_user_id"],"rank-request-review":["police_rank_requests","discord_user_id"],"rank-request-edit":["police_rank_requests","discord_user_id"],"rank-authorization-review":["police_rank_authorizations","target_id"],"sanction-delete":["police_sanctions","discord_user_id"],"shift-close":["police_duty_shifts","discord_user_id"],"shift-delete":["police_duty_shifts","discord_user_id"],"absence-review":["police_absence_requests","discord_user_id"]};
   if(lookups[action]){const id=String(body.id||"");if(!/^[0-9a-f-]{36}$/i.test(id))return json({error:"Identificador inválido."},400);const [table,field]=lookups[action];const rows=await db(table+"?select="+field+"&id=eq."+encodeURIComponent(id)+"&limit=1");if(!rows?.length)return json({error:"No se encontró el registro."},404);target=String(rows[0][field]);}
   if(action.startsWith("rank-config-"))return withOperationLock("rank-scale",()=>routePanel(req));
   if(!/^\d{17,20}$/.test(target))return json({error:"Usuario inválido."},400);

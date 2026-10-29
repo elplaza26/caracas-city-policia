@@ -28,6 +28,7 @@ jobs:
           node --check intake-editor.js
           node --check records-ui.js
           node --check app-shell.js
+          node --check absence-ui.js
       - name: Check Edge Function types and variable scope
         run: npx --yes --package typescript@5.9.3 tsc --noEmit --skipLibCheck --allowImportingTsExtensions --moduleResolution bundler --module esnext --target es2022 --lib es2022,dom,dom.iterable scripts/edge-runtime.d.ts supabase/functions/prime-police-panel/index.ts supabase/functions/prime-police-discord/index.ts
       - uses: actions/setup-node@v4

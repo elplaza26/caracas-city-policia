@@ -1,4 +1,5 @@
 const kinds:Record<string,{table:string,search:string[],date:string,statuses:string[]}>={
+ absences:{table:'police_absence_requests',search:['full_name','discord_username','discord_user_id','plate'],date:'created_at',statuses:['pending','approved','rejected','cancelled']},
  applications:{table:'police_applications',search:['full_name','discord_username','discord_user_id','answers->>character_info'],date:'created_at',statuses:['pending','accepted','rejected']},
  transfers:{table:'police_transfer_applications',search:['full_name','discord_username','discord_user_id','source_city','source_faction'],date:'created_at',statuses:['pending','accepted','rejected']},
  intakes:{table:'police_rank_requests',search:['character_name','discord_username','discord_user_id','plate','steam_username','requested_rank_name','approved_by_name'],date:'created_at',statuses:['pending','accepted','rejected']},

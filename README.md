@@ -11,6 +11,12 @@ Panel privado de gestión de personal de PRIME POLICE, orientado a UCOP y RR. HH
 - **Ascensos y descensos:** configuración de la escala a partir de roles de Discord, cambios de rango, motivo e historial de auditoría.
 - **Sanciones:** registro de Warn y Strike, motivo y evidencia, publicación en sus canales, sincronización de roles e historial. El tercer Strike asigna Expulsado y retira Policía; no expulsa del servidor.
 
+## Ausencias
+
+El canal `1539970136050499668` contiene el panel privado de ausencias de RRHH UCOP. Policía puede registrar fechas y motivo sin aprobación, con identidad y ficha obtenidas del servidor. La web permite registrar y cancelar ausencias directamente a los gestores autorizados. Estas dos operaciones son excepciones al circuito de aprobación de Directiva. Se conserva el historial completo y se rechazan fechas superpuestas y reenvíos duplicados. El último día está incluido, usando el calendario del servidor Europe/Paris.
+
+El módulo Ausencias tiene un listado por oficial con placa, rango, estado y número de registros, historial filtrado por agente, registro administrativo y estados vigentes/programados/finalizados. Personal y el panel principal distinguen disponibles y ausentes. Inactividad separa a quienes tienen una ausencia vigente; no se aplican sanciones ni bajas automáticas. La disponibilidad se calcula en cada consulta, sin cambiar el rol Policía ni cerrar bitácoras automáticamente. Las solicitudes y motivos solo están en tablas privadas, con RLS y acceso exclusivo del servidor.
+
 ## Acceso y datos
 
 Las sesiones del panel usan `PANEL_SESSION_SIGNING_KEY`, independiente del token de Discord, e incluyen un identificador que se valida en el servidor. Caducan en ocho horas o después de treinta minutos sin actividad. Cerrar sesión revoca el registro; Mis sesiones permite revisar dispositivos y cerrar los demás accesos. La actualización invalida los tokens antiguos. La migración `20261029133640_panel_sessions_and_limits.sql` añade las tablas privadas y las funciones de control de sesión y límites de peticiones; ninguna es accesible para anon/authenticated.
@@ -54,7 +60,7 @@ Los rangos se configuran dentro del panel: abre **Ascensos y descensos**, añade
 
 ## Autorización de ascensos
 
-Directiva incluye Gobierno/Alta Directiva `1539970134565982313`, Directiva `1539970134544748562` y Directiva `1539970134519578774`. Puede aplicar ascensos directamente y revisar propuestas. UCOP y los demás gestores pueden preparar cualquier cambio desde la web; su propuesta no se aplica hasta que Directiva la aprueba. Esto incluye personal, ascensos, descensos, escala de rangos, sanciones, ingresos, postulaciones, traslados y apodos. Como excepción, UCOP puede cerrar y eliminar bitácoras directamente. Los botones de entrada y salida personales de Discord siguen registrando el servicio del agente.
+Directiva incluye Gobierno/Alta Directiva `1539970134565982313`, Directiva `1539970134544748562` y Directiva `1539970134519578774`. Puede aplicar ascensos directamente y revisar propuestas. UCOP y los demás gestores pueden preparar cualquier cambio desde la web; su propuesta no se aplica hasta que Directiva la aprueba. Esto incluye personal, ascensos, descensos, escala de rangos, sanciones, ingresos, postulaciones, traslados y apodos. Como excepciones, UCOP puede cerrar y eliminar bitácoras directamente, y los gestores pueden registrar o cancelar ausencias sin aprobación. Los botones de entrada y salida personales de Discord siguen registrando el servicio del agente.
 
 Las nuevas propuestas se revisan en Panel principal → Cambios pendientes de Directiva. Hay pestañas de Pendientes e Historial con detalles y paginación. Los ascensos pendientes del sistema anterior también aparecen allí. Una aprobación comprueba que el rango actual sigue siendo el de la propuesta y vuelve a validar los permisos del revisor. Las operaciones simultáneas para un agente se protegen mediante una reserva con caducidad. Si una propuesta queda en procesamiento tras un corte, revisar Discord y la ficha antes de cualquier reparación manual.
 
