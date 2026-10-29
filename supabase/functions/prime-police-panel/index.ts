@@ -354,7 +354,7 @@ async function decideTransfer(req: Request) {
     let notified = false;
     try {
       const accepted = action === "accept";
-      const description = accepted
+      let description = accepted
         ? "RRHH UCOP aceptó tu solicitud y te asignó el rol Traslado. Contacta con UCOP para coordinar tu entrevista IC."
         : "RRHH UCOP revisó tu solicitud de traslado y, por el momento, no fue aprobada." + (reason ? "\nMotivo: " + reason : "");
       await sendPrivateDiscordMessage(String(item.discord_user_id), { embeds: [{ title: accepted ? "🚔 Traslado aceptado · PRIME POLICE" : "📋 Resultado de solicitud de traslado", description, color: accepted ? 0x45b879 : 0xd5ad5a }] });
@@ -504,11 +504,17 @@ async function decide(req: Request) {
     const attempt = Math.max(1, Number(app.attempt_number) || 1);
     const remaining = Math.max(0, 3 - attempt);
     const accepted = action === "accept";
-    const description = accepted
+    let description = accepted
       ? "RRHH UCOP aceptó tu postulación y te asignó el rol Preselección. UCOP coordinará contigo una entrevista IC. Después de aprobarla, podrás solicitar el rol Policía y el rango correspondiente."
       : remaining > 0
         ? "Gracias por tu tiempo y por querer formar parte de PRIME POLICE. En esta ocasión no has sido seleccionado. No te desanimes: puedes prepararte y volver a intentarlo. Te quedan **" + remaining + " de 3 intentos**."
         : "Gracias por tu esfuerzo y por postularte a PRIME POLICE. En esta ocasión no has sido seleccionado. Has utilizado tus **3 de 3 intentos**, así que no podrás enviar otra postulación. Te animamos a seguir participando en la comunidad y te deseamos lo mejor.";
+    if (!accepted && remaining > 0) {
+      const waitHours = attempt === 1 ? 24 : 48;
+      const reviewedAt = Date.parse(String(finalApp.reviewed_at || ""));
+      const retryAt = Math.ceil(((Number.isFinite(reviewedAt) ? reviewedAt : Date.now()) + waitHours * 3600000) / 1000);
+      description += "\n\nDebes esperar **" + waitHours + " horas** desde este rechazo. Podrás volver a postularte <t:" + retryAt + ":F> (<t:" + retryAt + ":R>).";
+    }
     try {
       await sendPrivateDiscordMessage(String(app.discord_user_id), {
         embeds: [{ title: accepted ? "🎉 Resultado de postulación · Aceptada" : "📋 Resultado de postulación · PRIME POLICE", description, color: accepted ? 0x45b879 : 0xd5ad5a, footer: { text: "RRHH UCOP · Intento " + attempt + "/3 · Mensaje privado" } }],

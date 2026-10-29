@@ -85,3 +85,7 @@ La opción «Sin rama · Policía» se guarda como `POLICIA`. Conserva el rol Po
 ## Correcciones de nuevos ingresos
 
 Cada solicitud de Nuevo ingreso permite «Editar datos»: nombre IC, placa, usuario de Steam y aprobación de entrevista. La cuenta de Discord y el estado no son editables desde ese formulario. UCOP envía la corrección a Pendientes; Directiva puede aplicarla directamente o aprobarla. La comparación de `updated_at` evita sobrescribir una edición más reciente. Los cambios se guardan en auditoría. En solicitudes ya aprobadas se corrige solo la solicitud; las fichas de personal activo se gestionan por separado.
+
+### Espera tras rechazar una postulación
+
+La RPC privada `submit_police_application` mantiene el máximo de tres intentos y aplica una espera de 24 horas tras el primer rechazo y 48 horas tras el segundo, contadas desde `reviewed_at`. Los envíos durante la espera no consumen intentos. El bot muestra la fecha de desbloqueo en la zona horaria del usuario y el mensaje privado de rechazo informa de la espera. Las solicitudes históricas sin fecha de revisión usan su fecha de creación.

@@ -46,7 +46,14 @@ async function processApplicationSubmit(i:any,userId:string,username:string,a:an
  const ageIc=personal.match(/edad\s*IC\s*:\s*(\d{1,3})/i);const ageOoc=personal.match(/edad\s*OOC\s*:\s*(\d{1,3})/i);
  const answer={character_info:personal,age_ic:ageIc?Number(ageIc[1]):null,age_ooc:ageOoc?Number(ageOoc[1]):null,motivation:a.motivation,detention_rights:a.detention_rights,scene_resolution:a.scene_resolution,roleplay_response:a.roleplay_response};
  const submitted=await db("rpc/submit_police_application",{method:"POST",body:JSON.stringify({p_discord_user_id:userId,p_discord_username:username,p_full_name:characterName,p_previous_experience:a.motivation,p_motivation:a.motivation,p_answers:answer})});
- if(!submitted?.ok){await editInteractionReply(i,String(submitted?.message||"No se pudo aceptar la postulación."));return;}
+ if(!submitted?.ok){
+  let message=String(submitted?.message||"No se pudo aceptar la postulación.");
+  if(submitted?.cooldown&&submitted?.retry_at){
+   const retryAt=Math.ceil(Date.parse(submitted.retry_at)/1000);
+   if(Number.isFinite(retryAt))message+="\nPodrás volver a enviarla <t:"+retryAt+":F> (<t:"+retryAt+":R>). Este envío no consume un intento.";
+  }
+  await editInteractionReply(i,message);return;
+ }
  await editInteractionReply(i,"📋 **RRHH UCOP · Escrito recibido en privado**\nTu postulación quedó registrada de forma privada. Este es tu intento "+submitted.attempt_number+" de 3. UCOP revisará tus respuestas y te enviará el resultado por privado.");
 }
 async function processTransferSubmit(i:any,userId:string,username:string,a:any){
@@ -197,7 +204,7 @@ async function handle(i:any){
 }
 Deno.serve(async(req:Request)=>{
  if(req.method==="OPTIONS")return new Response(null,{status:204,headers:CORS});
- if(req.method==="GET")return json({ok:true,service:"PRIME POLICE Discord applications",release:"absence-requests-2026-10-29b",duty_service:true,configured:{discord:Boolean(BOT_TOKEN),database:Boolean(SUPABASE_URL&&SERVICE_KEY),public_key:Boolean(DISCORD_PUBLIC_KEY)},application_id:APPLICATION_ID,guild_id:GUILD_ID,commands:["publicar_postulaciones","postulacion","traslado"],message:DISCORD_PUBLIC_KEY?"Endpoint disponible.":"Falta configurar DISCORD_PUBLIC_KEY en los secretos de Supabase."});
+ if(req.method==="GET")return json({ok:true,service:"PRIME POLICE Discord applications",release:"application-cooldowns-2026-10-30a",duty_service:true,configured:{discord:Boolean(BOT_TOKEN),database:Boolean(SUPABASE_URL&&SERVICE_KEY),public_key:Boolean(DISCORD_PUBLIC_KEY)},application_id:APPLICATION_ID,guild_id:GUILD_ID,commands:["publicar_postulaciones","postulacion","traslado"],message:DISCORD_PUBLIC_KEY?"Endpoint disponible.":"Falta configurar DISCORD_PUBLIC_KEY en los secretos de Supabase."});
  if(req.method!=="POST")return json({error:"Method not allowed"},405);
  const body=await req.text();if(!await validSignature(req,body))return json({error:"Invalid Discord signature or DISCORD_PUBLIC_KEY not configured"},401);
  let i:any;try{i=JSON.parse(body)}catch{return json({error:"Invalid JSON"},400)}
