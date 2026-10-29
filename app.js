@@ -280,13 +280,13 @@ function renderPreselections() {
   $("preselectionTotalStat").textContent=String(preselections.length);
   $("preselectionCount").textContent="· "+visible.length+(visible.length===preselections.length?"":" de "+preselections.length)+" personas";
   rows.replaceChildren();
-  if(!visible.length){const tr=document.createElement("tr"),td=document.createElement("td");td.colSpan=4;td.className="muted";td.textContent=preselections.length?"No hay preseleccionados que coincidan con la búsqueda.":"No hay personas pendientes de pasar a Personal de Policía.";tr.append(td);rows.append(tr);return;}
-  visible.forEach(person=>{const tr=document.createElement("tr");[person.full_name||"Sin nombre IC",(person.discord_username?"@"+person.discord_username+" · ":"")+person.discord_user_id,niceDate(person.accepted_at)].forEach(value=>{const td=document.createElement("td");td.textContent=value;tr.append(td);});const state=document.createElement("td"),badge=document.createElement("span");badge.className="badge pending";badge.textContent="Preseleccionado";state.append(badge);tr.append(state);rows.append(tr);});
+  if(!visible.length){const tr=document.createElement("tr"),td=document.createElement("td");td.colSpan=5;td.className="muted";td.textContent=preselections.length?"No hay preseleccionados que coincidan con la búsqueda.":"No hay personas pendientes de pasar a Personal de Policía.";tr.append(td);rows.append(tr);return;}
+  visible.forEach(person=>{const tr=document.createElement("tr");[person.full_name||"Sin nombre IC",(person.discord_username?"@"+person.discord_username+" · ":"")+person.discord_user_id,niceDate(person.accepted_at)].forEach(value=>{const td=document.createElement("td");td.textContent=value;tr.append(td);});const state=document.createElement("td"),badge=document.createElement("span");badge.className="badge pending";badge.textContent="Preseleccionado";state.append(badge);tr.append(state);const actions=document.createElement("td"),button=document.createElement("button");button.type="button";button.className="btn primary";button.textContent="Ingresar a la base";button.addEventListener("click",()=>openPreselectionAdmission(person));actions.append(button);tr.append(actions);rows.append(tr);});
 }
 async function loadPreselections(){
-  const rows=$("preselectionRows");rows.innerHTML='<tr><td colspan="4" class="muted">Cargando preseleccionados…</td></tr>';
+  const rows=$("preselectionRows");rows.innerHTML='<tr><td colspan="5" class="muted">Cargando preseleccionados…</td></tr>';
   try{const result=await request("preselections");preselections=result.preselections||[];renderPreselections();}
-  catch(error){rows.replaceChildren();const tr=document.createElement("tr"),td=document.createElement("td");td.colSpan=4;td.className="muted";td.textContent=error.message;tr.append(td);rows.append(tr);}
+  catch(error){rows.replaceChildren();const tr=document.createElement("tr"),td=document.createElement("td");td.colSpan=5;td.className="muted";td.textContent=error.message;tr.append(td);rows.append(tr);}
 }
 function renderRankRequests() {
   const list=$("rankRequestList");list.replaceChildren();

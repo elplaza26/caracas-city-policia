@@ -11,6 +11,12 @@ Panel privado de gestión de personal de PRIME POLICE, orientado a UCOP y RR. HH
 - **Ascensos y descensos:** configuración de la escala a partir de roles de Discord, cambios de rango, motivo e historial de auditoría.
 - **Sanciones:** registro de Warn y Strike, motivo y evidencia, publicación en sus canales, sincronización de roles e historial. El tercer Strike asigna Expulsado y retira Policía; no expulsa del servidor.
 
+## Ingreso administrativo desde Preseleccionados
+
+Cada fila de Preseleccionados ofrece Ingresar a la base. El gestor corrige el nombre IC, añade placa y Steam y confirma quién aprobó la entrevista IC. Directiva puede aplicarlo directamente; los demás gestores preparan la propuesta para Pendientes. El servidor verifica la preselección activa, el rol de Discord y la ausencia de ficha o placa duplicadas. Se asigna únicamente Policía y el apodo Nombre IC #placa; rama y rango se administran después en Personal.
+
+La migración `20261029143459_preselection_administrative_ingress.sql` guarda en una transacción la ficha, la conversión de la preselección, el ingreso administrativo aceptado y la auditoría. El identificador de operación impide duplicados al reintentar. Un fallo incierto de conexión no revierte roles de un ingreso que podría estar ya guardado; la interfaz conserva los datos y pide comprobar el registro.
+
 ## Ausencias
 
 El canal `1539970136050499668` contiene el panel privado de ausencias de RRHH UCOP. Policía puede registrar fechas y motivo sin aprobación, con identidad y ficha obtenidas del servidor. La web permite registrar y cancelar ausencias directamente a los gestores autorizados. Estas dos operaciones son excepciones al circuito de aprobación de Directiva. Se conserva el historial completo y se rechazan fechas superpuestas y reenvíos duplicados. El último día está incluido, usando el calendario del servidor Europe/Paris.

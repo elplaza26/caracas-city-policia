@@ -26,6 +26,7 @@ jobs:
           node --check shifts-actions.js
           node --check pending-changes.js
           node --check intake-editor.js
+          node --check preselection-ingress.js
           node --check records-ui.js
           node --check app-shell.js
           node --check absence-ui.js

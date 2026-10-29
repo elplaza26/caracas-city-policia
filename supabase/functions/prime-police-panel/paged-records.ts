@@ -5,7 +5,7 @@ const kinds:Record<string,{table:string,search:string[],date:string,statuses:str
  intakes:{table:'police_rank_requests',search:['character_name','discord_username','discord_user_id','plate','steam_username','requested_rank_name','approved_by_name'],date:'created_at',statuses:['pending','accepted','rejected']},
  personnel:{table:'police_personnel',search:['full_name','discord_username','discord_user_id','plate','rank_name','name_ooc'],date:'created_at',statuses:['active','inactive']},
  sanctions:{table:'police_sanctions',search:['target_name','discord_username','discord_user_id','plate','reason','issuer_name'],date:'created_at',statuses:['active','failed','pending']},
- preselections:{table:'police_preselections',search:['full_name','discord_username','discord_user_id'],date:'accepted_at',statuses:['active','incorporated']},
+ preselections:{table:'police_preselections',search:['full_name','discord_username','discord_user_id'],date:'accepted_at',statuses:['active','converted','withdrawn']},
 };
 async function query(path:string){
  const secret=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')||'';

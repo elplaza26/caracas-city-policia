@@ -3,7 +3,7 @@ import { accessMember } from './access-member.ts';
 import { withOperationLock } from './operation-lock.ts';
 import { writeAudit } from './audit-events.ts';
 export const CHANGE_ACTIONS:Record<string,string>={
- 'personnel-register':'Editar o registrar personal','personnel-delete':'Eliminar ficha de personal',
+ 'preselection-admit':'Ingresar preseleccionado a Personal','personnel-register':'Editar o registrar personal','personnel-delete':'Eliminar ficha de personal',
  'rank-change':'Ascenso o descenso','rank-config-save':'Modificar escala de rangos','rank-config-import-all':'Sincronizar escala con Discord',
  'decision':'Resolver postulación','transfer-decision':'Resolver traslado','rank-request-review':'Resolver nuevo ingreso','rank-request-edit':'Corregir datos de nuevo ingreso',
  'sanction':'Aplicar sanción','sanction-delete':'Eliminar sanción','nickname-sync':'Sincronizar nombre y placa','shift-close':'Cerrar bitácora','shift-delete':'Eliminar bitácora','absence-review':'Revisar ausencia','absence-register':'Registrar ausencia'
@@ -39,6 +39,14 @@ async function snapshot(action:string,payload:any,c:Context){
  if(action==='personnel-register'&&payload.record_action==='create'&&profile?.length)throw new ChangeInputError('Este ID de Discord ya tiene una ficha. Busca al agente en Personal y pulsa Editar.');
  if(action==='personnel-register'&&payload.record_action==='update'&&!profile?.length)throw new ChangeInputError('La ficha ya no existe. Actualiza Personal antes de registrar al agente.');
  const state:any={profile:profile?.[0]||null};
+ if(action==='preselection-admit'){
+  if(profile?.length)throw new ChangeInputError('Ya existe una ficha del agente. Revísala desde Personal.');
+  const candidates=await c.db('police_preselections?select=*&discord_user_id=eq.'+encodeURIComponent(target)+'&limit=1');const candidate=candidates?.[0];
+  if(!candidate||candidate.status!=='active')throw new ChangeInputError('La persona ya no está pendiente en Preseleccionados.');
+  if(payload.expected_updated_at&&String(payload.expected_updated_at)!==String(candidate.updated_at))throw new ChangeInputError('La preselección cambió. Actualiza la lista.');
+  if(!String(payload.full_name||'').trim()||!String(payload.plate||'').trim()||!String(payload.steam_username||'').trim()||!String(payload.approved_by_name||'').trim()||payload.interview_confirmed!==true)throw new ChangeInputError('Completa los datos del ingreso y confirma la entrevista IC.');
+  state.preselection=candidate;
+ }
  if(action!=='personnel-delete'){
   const member=await c.discord('/guilds/1539970134469378068/members/'+encodeURIComponent(target));state.roles=[...(member.roles||[])].sort();state.nickname=member.nick||null;
  }
