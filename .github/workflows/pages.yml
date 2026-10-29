@@ -26,12 +26,23 @@ jobs:
           node --check shifts-actions.js
           node --check pending-changes.js
           node --check intake-editor.js
+          node --check records-ui.js
+          node --check app-shell.js
       - name: Check Edge Function types and variable scope
         run: npx --yes --package typescript@5.9.3 tsc --noEmit --skipLibCheck --allowImportingTsExtensions --moduleResolution bundler --module esnext --target es2022 --lib es2022,dom,dom.iterable scripts/edge-runtime.d.ts supabase/functions/prime-police-panel/index.ts supabase/functions/prime-police-discord/index.ts
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Build public assets only
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+          node scripts/check-public-build.mjs
       - name: Upload site
         uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: dist
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4

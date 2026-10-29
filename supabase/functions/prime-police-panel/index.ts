@@ -1,3 +1,5 @@
+import { listPagedRecords } from "./paged-records.ts";
+import { createPanelSession, authenticatePanelSession, sessionRoutes, rateLimitRequest } from "./panel-sessions.ts";
 import { discordRequest, discordFailure } from "./discord-client.ts";
 import { interceptChanges } from "./change-requests.ts";
 import { writeAudit } from "./audit-events.ts";
@@ -125,39 +127,8 @@ async function sha256Hex(value: string) {
   const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(value)));
   return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
-async function signSession(userId: string) {
-  if (!BOT_TOKEN) throw new Error("Discord bot token is not configured");
-  const payload = base64urlEncode(encoder.encode(JSON.stringify({
-    sub: userId,
-    exp: Math.floor(Date.now() / 1000) + 8 * 60 * 60,
-  })));
-  const key = await crypto.subtle.importKey(
-    "raw", encoder.encode(BOT_TOKEN), { name: "HMAC", hash: "SHA-256" }, false, ["sign"],
-  );
-  const sig = new Uint8Array(await crypto.subtle.sign("HMAC", key, encoder.encode(payload)));
-  return payload + "." + base64urlEncode(sig);
-}
-async function authenticate(req: Request): Promise<string | null> {
-  const auth = req.headers.get("authorization") ?? "";
-  if (!auth.startsWith("Bearer ") || !BOT_TOKEN) return null;
-  const parts = auth.slice(7).trim().split(".");
-  if (parts.length !== 2) return null;
-  try {
-    const key = await crypto.subtle.importKey(
-      "raw", encoder.encode(BOT_TOKEN), { name: "HMAC", hash: "SHA-256" }, false, ["verify"],
-    );
-    const valid = await crypto.subtle.verify(
-      "HMAC", key, base64urlDecode(parts[1]), encoder.encode(parts[0]),
-    );
-    if (!valid) return null;
-    const session = JSON.parse(new TextDecoder().decode(base64urlDecode(parts[0])));
-    if (typeof session.sub !== "string" ||
-        !Number.isFinite(session.exp) || session.exp <= Math.floor(Date.now() / 1000)) return null;
-    return session.sub;
-  } catch {
-    return null;
-  }
-}
+async function signSession(userId: string, req: Request) { return createPanelSession(userId,req); }
+async function authenticate(req: Request): Promise<string|null> { return authenticatePanelSession(req); }
 
 async function login(req: Request) {
   if (!BOT_TOKEN || !SUPABASE_URL || !SERVICE_KEY) {
@@ -186,7 +157,7 @@ async function login(req: Request) {
       { method: "PATCH", body: JSON.stringify({ used_at: new Date().toISOString() }) },
     );
     if (!consumed?.length) return json({ error: "Ese código ya se utilizó. Genera uno nuevo en Discord." }, 409);
-    return json({ token: await signSession(row.discord_user_id), expires_in: 28800 });
+    return json({ token: await signSession(row.discord_user_id,req), expires_in: 28800 });
   } catch (e) {
     console.error("Panel login error:", String(e));
     return json({ error: "No se pudo iniciar sesión. Revisa la configuración del servidor." }, 500);
@@ -568,6 +539,7 @@ async function routePanel(req: Request): Promise<Response> {
   if (action === "oauth-callback" && req.method === "GET") return await finishDiscordOAuth(req);
   if (action === "login" && req.method === "POST") return await login(req);
   if (action === "me" && req.method === "GET") return await currentUser(req);
+  if (action === "records") { if(!await authorizedUser(req))return json({error:'Sesión caducada o sin permisos de gestión.'},403);return listPagedRecords(req,json); }
   if (action === "data" && req.method === "GET") return await listApplications(req);
   if (action === "decision" && req.method === "POST") return await decide(req);
   if (action === "transfers" && req.method === "GET") return await listTransfers(req);
@@ -587,7 +559,7 @@ async function routePanel(req: Request): Promise<Response> {
       commands_status: "managed_separately",
       configured: { discord: Boolean(BOT_TOKEN), database: Boolean(SUPABASE_URL && SERVICE_KEY), discord_oauth: Boolean(DISCORD_OAUTH_CLIENT_SECRET) },
 
-      version: "ucop-direct-shifts-2026-10-29e",
+      version: "secure-app-sessions-2026-10-29f",
     });
   }
   return json({ error: "Método no permitido." }, 405);
@@ -612,6 +584,8 @@ async function dispatchHttp(req:Request):Promise<Response>{try{
  const action=new URL(req.url).searchParams.get('panel')||'',origin=req.headers.get('origin');
  if(action!=='oauth-callback'&&origin&&origin!==PANEL_ORIGIN)return json({error:'Origen no autorizado.'},403);
  if(req.method==='OPTIONS')return routePanel(req);
+ if(!await rateLimitRequest(req,action))return json({error:'Demasiadas peticiones. Espera un minuto antes de volver a intentarlo.'},429);
+ const sessionResponse=await sessionRoutes(req,action,json);if(sessionResponse)return sessionResponse;
  const intercepted=await interceptChanges(req,action,{db,authorizedUser,discord,dispatch:routePanel,json});
  return intercepted||await dispatchWithLocks(req);
  }catch(error){console.error('Request dispatch:',String(error));const upstream=discordFailure(error);return upstream?json(upstream.body,upstream.status):json({error:'No se pudo procesar la petición. Comprueba la conexión y actualiza el registro.'},503);}}

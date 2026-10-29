@@ -1,3 +1,4 @@
+import { authenticatePanelSession } from "./panel-sessions.ts";
 import { discordRequest, discordFailure } from "./discord-client.ts";
 import { writeAudit } from "./audit-events.ts";
 import { accessMember } from "./access-member.ts";
@@ -26,7 +27,6 @@ const BLOCKED_ROLE_PERMISSION_FLAGS = (1n << 1n) | (1n << 2n) | (1n << 3n) | (1n
 const BOT_TOKEN = Deno.env.get("DISCORD_BOT_TOKEN") ?? "";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-const encoder = new TextEncoder();
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "https://primepolicerp.github.io", "Access-Control-Allow-Headers": "authorization, apikey, content-type", "Access-Control-Allow-Methods": "GET, POST, OPTIONS", Vary: "Origin", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer" } });
 
 function personnelNickname(name: string, plate: string) {
@@ -99,25 +99,8 @@ async function postRankAuditLog(title: string, color: number, fields: Array<{ na
   }
 }
 
-function decodeBase64Url(value: string) {
-  const base = value.replace(/-/g, "+").replace(/_/g, "/");
-  const padded = base + "=".repeat((4 - base.length % 4) % 4);
-  const binary = atob(padded);
-  return Uint8Array.from(binary, (char) => char.charCodeAt(0));
-}
 async function authorizedUser(req: Request): Promise<string | null> {
-  const auth = req.headers.get("authorization") ?? "";
-  if (!auth.startsWith("Bearer ") || !BOT_TOKEN) return null;
-  const parts = auth.slice(7).trim().split(".");
-  if (parts.length !== 2) return null;
-  let userId: string;
-  try {
-    const key = await crypto.subtle.importKey("raw", encoder.encode(BOT_TOKEN), { name: "HMAC", hash: "SHA-256" }, false, ["verify"]);
-    if (!await crypto.subtle.verify("HMAC", key, decodeBase64Url(parts[1]), encoder.encode(parts[0]))) return null;
-    const session = JSON.parse(new TextDecoder().decode(decodeBase64Url(parts[0])));
-    if (typeof session.sub !== "string" || !Number.isFinite(session.exp) || session.exp <= Math.floor(Date.now() / 1000)) return null;
-    userId = session.sub;
-  } catch { return null; }
+  const userId=await authenticatePanelSession(req);if(!userId)return null;
   try {
     const member = await accessMember(userId,req.method!=="GET"); requestMembers.set(req,member);
     return (member.roles ?? []).some((role: string) => MANAGER_ROLE_IDS.has(role)) ? userId : null;
