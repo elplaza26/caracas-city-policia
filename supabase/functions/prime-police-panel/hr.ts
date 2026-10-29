@@ -202,6 +202,8 @@ async function registerPersonnel(req: Request) {
   const plate = String(body?.plate ?? "").trim().slice(0, 30);
   const unit = String(body?.unit ?? "UCOP").trim().toUpperCase();
   const rankRoleId = String(body?.rank_role_id ?? "").trim();
+  const recordAction=String(body?.record_action||"");
+  if(recordAction&&!["create","update"].includes(recordAction))return json({error:"Operación de ficha inválida."},400);
   if (!validDiscordId(id) || !validDiscordId(rankRoleId) || !nameIc || !nameOoc || !plate || !BRANCH_ROLES[unit]) return json({ error: "Completa placa, nombre IC, nombre OOC, Discord y rango para registrar personal UCOP." }, 400);
   let member: any; let oldRoles: string[] = []; let addedTargetRole = false; let nicknameChanged = false; let restoreBranch: (() => Promise<void>) | null = null;
   try {
@@ -219,6 +221,8 @@ async function registerPersonnel(req: Request) {
     if (memberRoles.includes(EXPELLED_ROLE_ID)) return json({ error: "No se puede registrar a una persona con el rol de expulsado." }, 409);
     oldRoles = (configuredRanks ?? []).filter((item: any) => memberRoles.includes(String(item.role_id)) && item.role_id !== rankRoleId).map((item: any) => String(item.role_id));
     const existing = profiles?.[0] ?? {};
+    if(recordAction==="create"&&profiles?.length)return json({error:"Este ID de Discord ya tiene una ficha. Busca al agente en Personal y pulsa Editar; registrar de nuevo no crea otra persona."},409);
+    if(recordAction==="update"&&!profiles?.length)return json({error:"La ficha ya no existe. Actualiza Personal antes de registrar al agente."},409);
     if (existing.unit && !BRANCH_ROLES[existing.unit]) return json({ error: "Este perfil pertenece a otra unidad y no puede administrarse desde UCOP." }, 409);
     const currentRank=(configuredRanks??[]).filter((r:any)=>memberRoles.includes(r.role_id)).sort((a:any,b:any)=>Number(b.rank_order)-Number(a.rank_order))[0];
     const firstRank=(configuredRanks??[])[0];

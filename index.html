@@ -35,7 +35,7 @@
 .personnel-heading{align-items:flex-start;margin:4px 0 18px}.personnel-heading h2,.personnel-list-heading h2{font-size:22px;margin:3px 0}.personnel-heading .muted{margin:4px 0 0}.personnel-heading-actions{display:flex;align-items:center;gap:10px}.personnel-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:14px 0 20px}.personnel-stats .stat{padding:12px 16px}.personnel-stats .stat strong{font-size:24px}.personnel-filters{display:grid;grid-template-columns:minmax(260px,2fr) minmax(180px,1fr) minmax(150px,1fr);gap:10px;margin:0 0 14px}.personnel-filters .search{max-width:none;min-width:0}.personnel-list-heading{margin:22px 0 12px}.personnel-list-heading .muted{font-size:12px}.personnel-table{min-width:1050px}.personnel-table tbody tr:hover{background:#18211b}.personnel-table td{vertical-align:middle}.personnel-status{display:inline-flex;padding:4px 8px;border-radius:999px;font-size:10px;font-weight:800}.personnel-status.is-active{background:#153329;color:#8de4bd}.personnel-status.is-inactive{background:#302818;color:#f5d68c}.personnel-actions{display:flex;gap:6px;flex-wrap:wrap}.personnel-actions .btn{padding:6px 9px;font-size:11px;white-space:nowrap}.personnel-form-actions{display:flex;gap:8px;align-items:center}.personnel-form-actions #personnelButton{min-width:145px}@media(max-width:850px){.personnel-filters{grid-template-columns:1fr 1fr}.personnel-filters .search:first-child{grid-column:1/-1}}@media(max-width:560px){.personnel-heading-actions{width:100%;justify-content:space-between}.personnel-stats{gap:7px}.personnel-stats .stat{padding:10px}.personnel-stats .stat span{font-size:10px}.personnel-stats .stat strong{font-size:20px}.personnel-filters{grid-template-columns:1fr}.personnel-filters .search:first-child{grid-column:auto}.personnel-form-actions{flex-wrap:wrap}}
 </style>
 <style>.rank-entry{flex-wrap:wrap;gap:12px}.rank-entry>strong{flex:1;min-width:180px}.rank-days-control{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:11px}.rank-days-control input{width:78px;padding:7px 8px;border:1px solid var(--line);border-radius:8px;background:#0d110e;color:var(--text)}#rankEligibleList .candidate{padding:13px 16px}</style>
-<link rel="stylesheet" href="admin.css?v=20261028"></head>
+<link rel="stylesheet" href="admin.css?v=20261029-personnel"></head>
 <body>
 <main class="shell">
   <aside class="sidebar">
@@ -117,7 +117,7 @@
     <section id="personnelView" class="hidden">
       <div class="toolbar personnel-heading"><div><div class="eyebrow">UCOP · ASUNTOS INTERNOS</div><h2>Base de datos de personal policial</h2><p class="muted">Agentes de UCOP y CIC. Cada ficha mantiene el rol Policía, una rama y un rango coordinados con Discord.</p></div><div class="personnel-heading-actions"><span class="badge accepted">Policía · UCOP / CIC</span><button id="newPersonnelButton" class="btn primary" type="button">＋ Nuevo agente</button></div></div>
       <div class="personnel-stats"><div class="stat"><span>Personal registrado</span><strong id="personnelTotalStat">0</strong></div><div class="stat"><span>Activos</span><strong id="personnelActiveStat">0</strong></div><div class="stat"><span>Inactivos</span><strong id="personnelInactiveStat">0</strong></div></div>
-      <div id="personRegisterPanel" class="panel hidden">
+      <div id="personnelFeedback" class="notice hidden" role="status" aria-live="polite"></div><div id="personRegisterPanel" class="panel hidden">
         <div class="toolbar"><div><div class="eyebrow">UCOP · ASUNTOS INTERNOS</div><h2 id="personFormTitle">Registrar agente</h2></div><span class="badge accepted">Policía + rama + rango</span></div>
         <p>Herramienta interna de UCOP para gestionar personal, rangos y sanciones. Al guardar un rango, el apodo de Discord se sincroniza como Nombre IC #placa. El acceso se limita al personal con los roles gestores autorizados.</p>
         <form id="personnelForm">
@@ -125,7 +125,7 @@
             <div class="field"><label for="personPlate">N.º de placa</label><input id="personPlate" maxlength="30" placeholder="Ej. 0135" required></div>
             <div class="field"><label for="personName">Nombre IC</label><input id="personName" maxlength="100" placeholder="Nombre del personaje" required></div>
             <div class="field"><label for="personOoc">Nombre OOC</label><input id="personOoc" maxlength="100" placeholder="Nombre del jugador" required></div>
-            <div class="field"><label for="personDiscordId">Usuario de Discord · ID</label><input id="personDiscordId" inputmode="numeric" maxlength="20" placeholder="ID numérico de Discord" required></div>
+            <div class="field"><label for="personDiscordId">Usuario de Discord · ID</label><input id="personDiscordId" inputmode="numeric" pattern="[0-9]{17,20}" title="Copia el ID numérico de Discord (17 a 20 cifras), no el nombre ni una mención." maxlength="20" placeholder="ID numérico de Discord" required></div>
             <div class="field"><label>Rol base</label><input value="Policía" readonly><small class="muted">El agente debe tener este rol tras aprobar su ingreso.</small></div><div class="field"><label for="personUnit">Rama policial</label><select id="personUnit" required><option value="UCOP">UCOP</option><option value="CIC">CIC</option></select><small class="muted">Se asignará esta rama y se quitará la anterior.</small></div><div class="field"><label for="personRank">Rango de Policía</label><select id="personRank" class="search" required><option value="">Cargando rangos…</option></select><small id="personRankStatus" class="muted" role="status">Se sincronizan con Discord al abrir Personal.</small><button id="refreshPersonnelRanks" class="btn ghost" type="button">Actualizar rangos desde Discord</button></div>
           </div>
           <div class="personnel-form-actions"><button id="personnelButton" class="btn primary" type="submit">Registrar agente</button><button id="cancelPersonnelForm" class="btn ghost" type="button">Cancelar</button></div>
@@ -196,6 +196,6 @@
     </div>
   </section>
 </div>
-<script src="app.js?v=20261028-connection-fix" defer></script><script src="shifts.js?v=20261028-all-approvals" defer></script><script src="pending-changes.js?v=20261028" defer></script>
+<script src="app.js?v=20261029-personnel-feedback" defer></script><script src="shifts.js?v=20261028-all-approvals" defer></script><script src="pending-changes.js?v=20261029-personnel" defer></script>
 </body>
 </html>

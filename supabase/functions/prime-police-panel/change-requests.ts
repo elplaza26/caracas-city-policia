@@ -14,6 +14,7 @@ const id=(s:string)=>/^\d{17,20}$/.test(s);
 const canonical=(v:any):any=>Array.isArray(v)?v.map(canonical):v&&typeof v==='object'?Object.fromEntries(Object.keys(v).sort().map(k=>[k,canonical(v[k])])):v;
 async function fingerprint(v:any){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(canonical(v)))))).map(n=>n.toString(16).padStart(2,'0')).join('');}
 type Context={db:(path:string,init?:RequestInit)=>Promise<any>,authorizedUser:(req:Request)=>Promise<string|null>,discord:(path:string)=>Promise<any>,dispatch:(req:Request)=>Promise<Response>,json:(body:any,status?:number)=>Response};
+class ChangeInputError extends Error{}
 async function snapshot(action:string,payload:any,c:Context){
  if(action.startsWith('rank-config-'))return{resource:'rank-scale',state:{ranks:await c.db('police_rank_roles?select=*&order=rank_order.asc')}};
  const lookups:Record<string,[string,string]>={decision:['police_applications','discord_user_id'],'transfer-decision':['police_transfer_applications','discord_user_id'],'rank-request-review':['police_rank_requests','discord_user_id'],'sanction-delete':['police_sanctions','discord_user_id'],'shift-close':['police_duty_shifts','discord_user_id']};
@@ -24,6 +25,8 @@ async function snapshot(action:string,payload:any,c:Context){
  }
  const target=String(payload.discord_user_id||'');if(!id(target))throw Error('ID de Discord inválido.');
  const profile=await c.db('police_personnel?select=*&discord_user_id=eq.'+encodeURIComponent(target)+'&limit=1');
+ if(action==='personnel-register'&&payload.record_action==='create'&&profile?.length)throw new ChangeInputError('Este ID de Discord ya tiene una ficha. Busca al agente en Personal y pulsa Editar.');
+ if(action==='personnel-register'&&payload.record_action==='update'&&!profile?.length)throw new ChangeInputError('La ficha ya no existe. Actualiza Personal antes de registrar al agente.');
  const state:any={profile:profile?.[0]||null};
  if(action!=='personnel-delete'){
   const member=await c.discord('/guilds/1539970134469378068/members/'+encodeURIComponent(target));state.roles=[...(member.roles||[])].sort();state.nickname=member.nick||null;
@@ -80,5 +83,5 @@ export async function interceptChanges(req:Request,action:string,c:Context):Prom
   const rows=await c.db('police_change_requests',{method:'POST',body:JSON.stringify({action,resource_key:before.resource,requested_by:actor,requested_by_name:actorName,payload,before_state:before.state,fingerprint:await fingerprint(before.state)})});
   await writeAudit('⏳ Cambio pendiente de Directiva',[{name:'Cambio',value:CHANGE_ACTIONS[action]},{name:'Propuesto por',value:actorName},{name:'Referencia',value:before.resource}]);
   return c.json({ok:true,pending_approval:true,request_id:rows?.[0]?.id,message:'Propuesta enviada a Pendientes del panel principal. Directiva debe aprobarla antes de que se aplique.'});
- }catch(error){console.error('Queue pending change:',String(error));const upstream=discordFailure(error);if(upstream)return c.json(upstream.body,upstream.status);if(String(error).includes('409'))return c.json({error:'Ya hay una propuesta de este tipo pendiente para este registro.'},409);return c.json({error:'No se pudo preparar la propuesta. Revisa el registro y las migraciones.'},400);}
+ }catch(error){console.error('Queue pending change:',String(error));if(error instanceof ChangeInputError)return c.json({error:error.message},409);const upstream=discordFailure(error);if(upstream)return c.json(upstream.body,upstream.status);if(String(error).includes('409'))return c.json({error:'Ya hay una propuesta de este tipo pendiente para este registro.'},409);return c.json({error:'No se pudo preparar la propuesta. Revisa el registro y las migraciones.'},400);}
 }

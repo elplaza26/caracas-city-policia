@@ -4,3 +4,5 @@ body{background:#141518!important;color:var(--text);font-family:'Segoe UI',Arial
 @media(min-width:821px){.shell{grid-template-columns:228px minmax(0,1fr)!important}}.intro h2{font-size:25px!important;letter-spacing:-.5px!important}.panel{padding:20px}.admin-columns p{color:var(--muted)}
 
 .login-actions a{display:block;text-align:center;text-decoration:none}.login-actions a:focus-visible{outline:2px solid #a9c8ff;outline-offset:4px}
+
+#personnelFeedback{margin-bottom:16px;white-space:pre-wrap}#personnelFeedback.admin-error{background:#38252a!important;border-color:#87515c!important;color:#ffccd3!important}
