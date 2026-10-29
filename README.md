@@ -59,3 +59,7 @@ El panel comparte las consultas simultáneas a Discord, respeta sus respuestas d
 ## Policía sin rama
 
 La opción «Sin rama · Policía» se guarda como `POLICIA`. Conserva el rol Policía y el rango, sin asignar UCOP/CIC. Cambiar a esta opción retira ambas ramas y mantiene la regla de autorización de Directiva. Las altas nuevas sin rama de Discord se registran en Policía general. Se incluyen en personal, sanciones, bitácoras y resúmenes. La migración `20261029011227_police_unassigned_branch.sql` actualiza el valor por defecto y la validación de turnos; no reclasifica las fichas existentes.
+
+## Correcciones de nuevos ingresos
+
+Cada solicitud de Nuevo ingreso permite «Editar datos»: nombre IC, placa, usuario de Steam y aprobación de entrevista. La cuenta de Discord y el estado no son editables desde ese formulario. UCOP envía la corrección a Pendientes; Directiva puede aplicarla directamente o aprobarla. La comparación de `updated_at` evita sobrescribir una edición más reciente. Los cambios se guardan en auditoría. En solicitudes ya aprobadas se corrige solo la solicitud; las fichas de personal activo se gestionan por separado.

@@ -286,7 +286,7 @@ async function loadPreselections(){
 function renderRankRequests() {
   const list=$("rankRequestList");list.replaceChildren();
   const query=$("rankRequestSearch").value.trim().toLocaleLowerCase("es");
-  const visible=rankRequests.filter(item=>item.status===activeRankRequestStatus&&[item.character_name,item.plate,item.requested_rank_name,item.approved_by_name,item.discord_username,item.discord_user_id].join(" ").toLocaleLowerCase("es").includes(query));
+  const visible=rankRequests.filter(item=>item.status===activeRankRequestStatus&&[item.character_name,item.steam_username,item.plate,item.requested_rank_name,item.approved_by_name,item.discord_username,item.discord_user_id].join(" ").toLocaleLowerCase("es").includes(query));
   $("rankRequestPendingCount").textContent=rankRequests.filter(x=>x.status==="pending").length;
   $("rankRequestAcceptedCount").textContent=rankRequests.filter(x=>x.status==="accepted").length;
   $("rankRequestRejectedCount").textContent=rankRequests.filter(x=>x.status==="rejected").length;
@@ -307,6 +307,7 @@ function renderRankRequests() {
     if(item.reviewed_by_name)grid.append(detail("Revisado por UCOP",item.reviewed_by_name),detail("Fecha de revisión",niceDate(item.reviewed_at)));
     if(item.review_reason)grid.append(detail("Observación",item.review_reason));
     const actions=document.createElement("div");actions.className="candidate-actions";
+    const edit=document.createElement("button");edit.type="button";edit.className="btn";edit.textContent="Editar datos";edit.addEventListener("click",()=>openIntakeEditor(item));actions.append(edit);
     if(item.status==="pending"){
       const accept=document.createElement("button");accept.type="button";accept.className="btn accept";accept.textContent=policeOnly?"Aprobar y asignar Policía":"Aprobar Policía + rango";accept.addEventListener("click",()=>reviewRankRequest(item,"accept",accept));
       const reject=document.createElement("button");reject.type="button";reject.className="btn reject";reject.textContent="Rechazar";reject.addEventListener("click",()=>reviewRankRequest(item,"reject",reject));actions.append(accept,reject);

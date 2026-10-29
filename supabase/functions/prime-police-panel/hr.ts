@@ -364,6 +364,27 @@ async function listRankRequests(req: Request) {
   }
 }
 
+async function editRankRequest(req:Request){
+ const auth=await allowed(req);if(auth.error)return auth.error;
+ let body:any;try{body=await req.json();}catch{return json({error:"Datos inválidos."},400);}
+ const id=String(body?.id||"");if(!/^[0-9a-f-]{36}$/i.test(id))return json({error:"Solicitud inválida."},400);
+ const patch:Record<string,string>={};
+ for(const [key,max,required]of [["character_name",100,true],["plate",30,true],["steam_username",100,false],["approved_by_name",100,true]] as const){
+  const value=String(body?.[key]??"").trim();if((required&&!value)||value.length>max)return json({error:"Revisa nombre IC, placa, Steam y quién aprobó la entrevista."},400);patch[key]=key==="approved_by_name"?value.replace(/@/g,"").trim():value;
+ }
+ if(!patch.approved_by_name)return json({error:"Indica quién aprobó la entrevista IC."},400);
+ try{
+  const rows=await db("police_rank_requests?select=*&id=eq."+enc(id)+"&limit=1"),current=rows?.[0];if(!current)return json({error:"La solicitud ya no existe."},404);
+  if(Object.prototype.hasOwnProperty.call(body,"expected_updated_at")&&String(body.expected_updated_at??"")!==String(current.updated_at??""))return json({error:"Esta solicitud cambió desde que la abriste. Actualiza Nuevos ingresos antes de editarla."},409);
+  const changed=Object.entries(patch).filter(([key,value])=>value!==String(current[key]??""));if(!changed.length)return json({ok:true,message:"No hay datos nuevos que guardar."});
+  const version=current.updated_at?"&updated_at=eq."+enc(current.updated_at):"&updated_at=is.null";
+  const updated=await db("police_rank_requests?id=eq."+enc(id)+version+"&status=eq."+enc(current.status),{method:"PATCH",body:JSON.stringify({...patch,updated_at:new Date().toISOString()})});
+  if(!updated?.length)return json({error:"La solicitud cambió durante el guardado. Actualiza antes de repetir."},409);
+  await writeAudit("✏️ Datos de nuevo ingreso corregidos",[{name:"Solicitud",value:id},{name:"Discord",value:String(current.discord_user_id)},{name:"Editado por",value:auth.userId!},...changed.map(([key,value])=>({name:({character_name:"Nombre IC",plate:"Placa",steam_username:"Steam",approved_by_name:"Entrevista aprobada por"} as Record<string,string>)[key],value:String(current[key]||"Sin indicar")+" → "+value}))]);
+  return json({ok:true,request:updated[0],message:current.status==="accepted"?"Datos de la solicitud corregidos. Si también debes corregir la ficha policial o el apodo, hazlo desde Personal.":"Datos corregidos. Se usarán al aprobar el ingreso."});
+ }catch(error){console.error("Edit intake request:",String(error));return json({error:"No se pudieron guardar los datos del ingreso. Actualiza la solicitud para comprobar el resultado."},502);}
+}
+
 async function reviewRankRequest(req: Request) {
   const auth = await allowed(req); if (auth.error) return auth.error;
   let body: any; try { body = await req.json(); } catch { return json({ error: "Solicitud inválida." }, 400); }
@@ -605,6 +626,7 @@ async function changeRank(req: Request) {
 }
 
 export async function handleHr(req: Request, action: string): Promise<Response | null> {
+  if(action==="rank-request-edit"&&req.method==="POST")return await editRankRequest(req);
   if(action==="audit-events"&&req.method==="GET"){
    const auth=await allowed(req);if(auth.error)return auth.error;
    try{return json({ok:true,events:await db("police_audit_events?select=*&order=created_at.desc&limit=30")});}catch{return json({error:"No se pudo cargar el historial administrativo."},502);}

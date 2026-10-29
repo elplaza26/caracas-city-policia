@@ -24,6 +24,7 @@ jobs:
           node --check app.js
           node --check shifts.js
           node --check pending-changes.js
+          node --check intake-editor.js
       - name: Check Edge Function types and variable scope
         run: npx --yes --package typescript@5.9.3 tsc --noEmit --skipLibCheck --allowImportingTsExtensions --moduleResolution bundler --module esnext --target es2022 --lib es2022,dom,dom.iterable scripts/edge-runtime.d.ts supabase/functions/prime-police-panel/index.ts supabase/functions/prime-police-discord/index.ts
       - name: Upload site

@@ -1,6 +1,6 @@
 let pendingChangeStatus='pending',pendingChangeOffset=0,pendingChangeSequence=0;
-const changeLabels={'personnel-register':'Editar o registrar personal','personnel-delete':'Eliminar ficha de personal','rank-change':'Ascenso o descenso','rank-config-save':'Modificar escala de rangos','rank-config-import-all':'Sincronizar escala de rangos','decision':'Resolver postulación','transfer-decision':'Resolver traslado','rank-request-review':'Resolver nuevo ingreso','sanction':'Aplicar sanción','sanction-delete':'Eliminar sanción','nickname-sync':'Sincronizar nombre y placa','shift-close':'Cerrar bitácora'};
-const changeFieldLabels={record_action:'Operación sobre la ficha',discord_user_id:'Usuario de Discord',full_name:'Nombre completo',name_ooc:'Nombre OOC',plate:'Placa',unit:'Rama',rank_role_id:'Rango',role_ids:'Escala de rangos',minimum_days_by_role:'Días mínimos por rango',action_type:'Tipo de movimiento',effective_date:'Fecha efectiva',reason:'Motivo',target_name:'Agente',evidence_url:'Evidencia',action:'Decisión',decision:'Decisión'};
+const changeLabels={'personnel-register':'Editar o registrar personal','personnel-delete':'Eliminar ficha de personal','rank-change':'Ascenso o descenso','rank-config-save':'Modificar escala de rangos','rank-config-import-all':'Sincronizar escala de rangos','decision':'Resolver postulación','transfer-decision':'Resolver traslado','rank-request-review':'Resolver nuevo ingreso','rank-request-edit':'Corregir datos de nuevo ingreso','sanction':'Aplicar sanción','sanction-delete':'Eliminar sanción','nickname-sync':'Sincronizar nombre y placa','shift-close':'Cerrar bitácora'};
+const changeFieldLabels={character_name:"Nombre IC",steam_username:"Usuario de Steam",approved_by_name:"Entrevista aprobada por",record_action:'Operación sobre la ficha',discord_user_id:'Usuario de Discord',full_name:'Nombre completo',name_ooc:'Nombre OOC',plate:'Placa',unit:'Rama',rank_role_id:'Rango',role_ids:'Escala de rangos',minimum_days_by_role:'Días mínimos por rango',action_type:'Tipo de movimiento',effective_date:'Fecha efectiva',reason:'Motivo',target_name:'Agente',evidence_url:'Evidencia',action:'Decisión',decision:'Decisión'};
 const changeValueLabels={POLICIA:"Sin rama · Policía",create:'Registrar nuevo agente',update:'Editar agente',accept:'Aceptar',reject:'Rechazar',promotion:'Ascenso',demotion:'Descenso',assignment:'Asignación inicial',warning:'Warning',strike:'Strike'};
 function changeValue(value,item){
  const ranks=item.before_state?.ranks||item.before_state?.available_roles||[];
@@ -28,7 +28,7 @@ async function loadPendingChanges(){
    card.append(title,meta,status);
    const fields=document.createElement('div');fields.className='details';
    for(const [key,value]of Object.entries(item.payload||{})){
-    if(key==='id'||key==='discord_user_id')continue;
+    if(key==='id'||key==='discord_user_id'||key==='expected_updated_at')continue;
     const previous=record[key],oldValue=previous!==undefined&&JSON.stringify(previous)!==JSON.stringify(value)?changeValue(previous,item)+' → ':'';
     fields.append(detail(changeFieldLabels[key]||key,oldValue+changeValue(value,item)));
    }

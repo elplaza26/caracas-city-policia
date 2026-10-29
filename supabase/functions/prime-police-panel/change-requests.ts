@@ -5,7 +5,7 @@ import { writeAudit } from './audit-events.ts';
 export const CHANGE_ACTIONS:Record<string,string>={
  'personnel-register':'Editar o registrar personal','personnel-delete':'Eliminar ficha de personal',
  'rank-change':'Ascenso o descenso','rank-config-save':'Modificar escala de rangos','rank-config-import-all':'Sincronizar escala con Discord',
- 'decision':'Resolver postulación','transfer-decision':'Resolver traslado','rank-request-review':'Resolver nuevo ingreso',
+ 'decision':'Resolver postulación','transfer-decision':'Resolver traslado','rank-request-review':'Resolver nuevo ingreso','rank-request-edit':'Corregir datos de nuevo ingreso',
  'sanction':'Aplicar sanción','sanction-delete':'Eliminar sanción','nickname-sync':'Sincronizar nombre y placa','shift-close':'Cerrar bitácora'
 };
 const directors=new Set(['1539970134565982313','1539970134544748562','1539970134519578774']);
@@ -17,10 +17,11 @@ type Context={db:(path:string,init?:RequestInit)=>Promise<any>,authorizedUser:(r
 class ChangeInputError extends Error{}
 async function snapshot(action:string,payload:any,c:Context){
  if(action.startsWith('rank-config-'))return{resource:'rank-scale',state:{ranks:await c.db('police_rank_roles?select=*&order=rank_order.asc')}};
- const lookups:Record<string,[string,string]>={decision:['police_applications','discord_user_id'],'transfer-decision':['police_transfer_applications','discord_user_id'],'rank-request-review':['police_rank_requests','discord_user_id'],'sanction-delete':['police_sanctions','discord_user_id'],'shift-close':['police_duty_shifts','discord_user_id']};
+ const lookups:Record<string,[string,string]>={decision:['police_applications','discord_user_id'],'transfer-decision':['police_transfer_applications','discord_user_id'],'rank-request-review':['police_rank_requests','discord_user_id'],'rank-request-edit':['police_rank_requests','discord_user_id'],'sanction-delete':['police_sanctions','discord_user_id'],'shift-close':['police_duty_shifts','discord_user_id']};
  if(lookups[action]){
   const recordId=String(payload.id||'');if(!uuid(recordId))throw Error('Identificador de registro inválido.');
   const [table,field]=lookups[action],rows=await c.db(table+'?select=*&id=eq.'+encodeURIComponent(recordId)+'&limit=1');if(!rows?.length)throw Error('El registro ya no existe.');
+  if(action==='rank-request-edit'&&Object.prototype.hasOwnProperty.call(payload,'expected_updated_at')&&String(payload.expected_updated_at??'')!==String(rows[0].updated_at??''))throw new ChangeInputError('La solicitud cambió desde que la abriste. Actualiza Nuevos ingresos antes de corregirla.');
   return{resource:'personnel:'+String(rows[0][field]),state:{record:rows[0]}};
  }
  const target=String(payload.discord_user_id||'');if(!id(target))throw Error('ID de Discord inválido.');
