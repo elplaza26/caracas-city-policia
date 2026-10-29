@@ -567,7 +567,7 @@ async function routePanel(req: Request): Promise<Response> {
       commands_status: "managed_separately",
       configured: { discord: Boolean(BOT_TOKEN), database: Boolean(SUPABASE_URL && SERVICE_KEY), discord_oauth: Boolean(DISCORD_OAUTH_CLIENT_SECRET) },
 
-      version: "approval-embeds-2026-10-28l",
+      version: "neutral-branch-2026-10-29a",
     });
   }
   return json({ error: "Método no permitido." }, 405);
@@ -655,7 +655,7 @@ async function listSanctions(req: Request) {
   const userId = await authorizedUser(req);
   if (!userId) return json({ error: "No tienes un rol autorizado para gestionar sanciones." }, 403);
   try {
-    const personnel = await db("police_personnel?select=discord_user_id&unit=in.(UCOP,CIC)&limit=500");
+    const personnel = await db("police_personnel?select=discord_user_id&unit=in.(POLICIA,UCOP,CIC)&limit=500");
     const ids = (personnel ?? []).map((row: any) => String(row.discord_user_id)).filter((id: string) => /^\d{17,20}$/.test(id));
     if (!ids.length) return json({ ok: true, sanctions: [] });
     const rows = await db("police_sanctions?select=*&discord_user_id=in.(" + ids.join(",") + ")&order=created_at.desc&limit=200");
@@ -687,7 +687,7 @@ async function createSanction(req: Request) {
   let member: any;
   let inserted: any;
   try {
-    const ucopPersonnel = await db("police_personnel?select=discord_user_id&discord_user_id=eq." + targetId + "&unit=in.(UCOP,CIC)&limit=1");
+    const ucopPersonnel = await db("police_personnel?select=discord_user_id&discord_user_id=eq." + targetId + "&unit=in.(POLICIA,UCOP,CIC)&limit=1");
     if (!ucopPersonnel?.length) return json({ error: "La persona no está registrada como personal UCOP." }, 409);
     member = await discord("/guilds/" + GUILD_ID + "/members/" + encodeURIComponent(targetId)) as any;
     const roles: string[] = member.roles ?? [];
@@ -769,7 +769,7 @@ async function deleteSanction(req: Request) {
     const found = await db("police_sanctions?select=*&id=eq." + encodeURIComponent(id) + "&limit=1");
     const sanction = found?.[0];
     if (!sanction) return json({ error: "La sanción ya no existe." }, 404);
-    const personnel = await db("police_personnel?select=discord_user_id&discord_user_id=eq." + encodeURIComponent(String(sanction.discord_user_id)) + "&unit=in.(UCOP,CIC)&limit=1");
+    const personnel = await db("police_personnel?select=discord_user_id&discord_user_id=eq." + encodeURIComponent(String(sanction.discord_user_id)) + "&unit=in.(POLICIA,UCOP,CIC)&limit=1");
     if (!personnel?.length) return json({ error: "El registro no pertenece a personal UCOP." }, 409);
     const targetId = String(sanction.discord_user_id);
     const member = await discord("/guilds/" + GUILD_ID + "/members/" + encodeURIComponent(targetId)) as any;

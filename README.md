@@ -55,3 +55,7 @@ La migración `20261028195820_police_all_changes_approval.sql` añade la bandeja
 ## Conexión y confirmación de operaciones
 
 El panel comparte las consultas simultáneas a Discord, respeta sus respuestas de límite temporal y reintenta una vez las lecturas que fallen por conexión o errores del servicio. Los cambios no se repiten automáticamente tras un corte de red o un error incierto del servidor. La web conserva la sesión ante fallos temporales y muestra una referencia de petición para localizar el error. El chequeo público de conexión ya no registra ni consulta comandos de Discord en cada carga.
+
+## Policía sin rama
+
+La opción «Sin rama · Policía» se guarda como `POLICIA`. Conserva el rol Policía y el rango, sin asignar UCOP/CIC. Cambiar a esta opción retira ambas ramas y mantiene la regla de autorización de Directiva. Las altas nuevas sin rama de Discord se registran en Policía general. Se incluyen en personal, sanciones, bitácoras y resúmenes. La migración `20261029011227_police_unassigned_branch.sql` actualiza el valor por defecto y la validación de turnos; no reclasifica las fichas existentes.

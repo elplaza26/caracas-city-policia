@@ -5,6 +5,7 @@ const GUILD_ID = "1539970134469378068";
 const POLICE_ROLE_ID = "1539970134482092038";
 const PRESELECTION_ROLE_ID = "1564685481457877012";
 const CIC_ROLE_ID = "1539970134519578772";
+const VALID_UNITS = new Set(["POLICIA","UCOP","CIC"]);
 const BRANCH_ROLES: Record<string, string> = { UCOP: "1539970134519578773", CIC: CIC_ROLE_ID };
 const EXPELLED_ROLE_ID = "1539970134482092034";
 const RANK_AUDIT_CHANNEL_ID = "1539970137246142604";
@@ -47,14 +48,14 @@ async function updatePersonnelNickname(memberId: string, name: string, plate: st
 
 async function syncPersonnelBranch(memberId: string, unit: string, originalRoles: string[]) {
   const wanted = BRANCH_ROLES[unit];
-  if (!wanted) throw new Error("Rama inválida");
+  if (!VALID_UNITS.has(unit)) throw new Error("Rama inválida");
   const added: string[] = [], removed: string[] = [];
   const restore = async () => {
     for (const roleId of removed) await discord("/guilds/" + GUILD_ID + "/members/" + enc(memberId) + "/roles/" + roleId, { method: "PUT", body: "{}" });
     for (const roleId of added) await discord("/guilds/" + GUILD_ID + "/members/" + enc(memberId) + "/roles/" + roleId, { method: "DELETE" });
   };
   try {
-    if (!originalRoles.includes(wanted)) {
+    if (wanted && !originalRoles.includes(wanted)) {
       await discord("/guilds/" + GUILD_ID + "/members/" + enc(memberId) + "/roles/" + wanted, { method: "PUT", body: "{}" }); added.push(wanted);
     }
     for (const roleId of Object.values(BRANCH_ROLES)) if (roleId !== wanted && originalRoles.includes(roleId)) {
@@ -162,7 +163,7 @@ async function allowed(req: Request) {
 }async function listPersonnel(req: Request) {
   const auth = await allowed(req); if (auth.error) return auth.error;
   try {
-    const records = await db("police_personnel?select=discord_user_id,discord_username,full_name,name_ooc,steam_username,plate,unit,rank_name,rank_role_id,status,source_application_id,created_at,updated_at,last_rank_change_at&unit=in.(UCOP,CIC)&order=full_name.asc&limit=500");
+    const records = await db("police_personnel?select=discord_user_id,discord_username,full_name,name_ooc,steam_username,plate,unit,rank_name,rank_role_id,status,source_application_id,created_at,updated_at,last_rank_change_at&unit=in.(POLICIA,UCOP,CIC)&order=full_name.asc&limit=500");
     return json({ ok: true, personnel: records ?? [] });
   } catch (error) { console.error("Personnel list error:", String(error)); return json({ error: "No se pudo cargar la base de personal." }, 500); }
 }
@@ -184,7 +185,7 @@ async function deletePersonnel(req: Request) {
   const id = String(body?.discord_user_id ?? "").trim();
   if (!validDiscordId(id)) return json({ error: "El ID de Discord no es válido." }, 400);
   try {
-    const removed = await db("police_personnel?discord_user_id=eq." + enc(id) + "&unit=in.(UCOP,CIC)", { method: "DELETE" });
+    const removed = await db("police_personnel?discord_user_id=eq." + enc(id) + "&unit=in.(POLICIA,UCOP,CIC)", { method: "DELETE" });
     if (!Array.isArray(removed) || !removed.length) return json({ error: "Ese agente ya no aparece en el registro de personal." }, 404);
     await postRankAuditLog("🗑️ Ficha eliminada",0xe87979,[{name:"Agente ID",value:id},{name:"Gestor",value:auth.userId!}]);
     return json({ ok: true, message: "Agente eliminado del registro de personal." });
@@ -200,11 +201,11 @@ async function registerPersonnel(req: Request) {
   const nameIc = String(body?.full_name ?? "").trim().slice(0, 100);
   const nameOoc = String(body?.name_ooc ?? "").trim().slice(0, 100);
   const plate = String(body?.plate ?? "").trim().slice(0, 30);
-  const unit = String(body?.unit ?? "UCOP").trim().toUpperCase();
+  const unit = String(body?.unit ?? "POLICIA").trim().toUpperCase();
   const rankRoleId = String(body?.rank_role_id ?? "").trim();
   const recordAction=String(body?.record_action||"");
   if(recordAction&&!["create","update"].includes(recordAction))return json({error:"Operación de ficha inválida."},400);
-  if (!validDiscordId(id) || !validDiscordId(rankRoleId) || !nameIc || !nameOoc || !plate || !BRANCH_ROLES[unit]) return json({ error: "Completa placa, nombre IC, nombre OOC, Discord y rango para registrar personal UCOP." }, 400);
+  if (!validDiscordId(id) || !validDiscordId(rankRoleId) || !nameIc || !nameOoc || !plate || !VALID_UNITS.has(unit)) return json({ error: "Completa placa, nombre IC, nombre OOC, Discord y rango para registrar personal UCOP." }, 400);
   let member: any; let oldRoles: string[] = []; let addedTargetRole = false; let nicknameChanged = false; let restoreBranch: (() => Promise<void>) | null = null;
   try {
     const [guildMember, profiles, configuredRanks] = await Promise.all([
@@ -223,7 +224,7 @@ async function registerPersonnel(req: Request) {
     const existing = profiles?.[0] ?? {};
     if(recordAction==="create"&&profiles?.length)return json({error:"Este ID de Discord ya tiene una ficha. Busca al agente en Personal y pulsa Editar; registrar de nuevo no crea otra persona."},409);
     if(recordAction==="update"&&!profiles?.length)return json({error:"La ficha ya no existe. Actualiza Personal antes de registrar al agente."},409);
-    if (existing.unit && !BRANCH_ROLES[existing.unit]) return json({ error: "Este perfil pertenece a otra unidad y no puede administrarse desde UCOP." }, 409);
+    if (existing.unit && !VALID_UNITS.has(existing.unit)) return json({ error: "Este perfil pertenece a otra unidad y no puede administrarse desde UCOP." }, 409);
     const currentRank=(configuredRanks??[]).filter((r:any)=>memberRoles.includes(r.role_id)).sort((a:any,b:any)=>Number(b.rank_order)-Number(a.rank_order))[0];
     const firstRank=(configuredRanks??[])[0];
     if(!auth.director && ((!currentRank&&rankRoleId!==firstRank?.role_id)||(currentRank&&Number(rank.rank_order)>Number(currentRank.rank_order)))) {
@@ -344,7 +345,7 @@ async function saveRankConfig(req: Request) {
 }async function rankHistory(req: Request) {
   const auth = await allowed(req); if (auth.error) return auth.error;
   try {
-    const personnel = await db("police_personnel?select=discord_user_id&unit=in.(UCOP,CIC)&limit=500");
+    const personnel = await db("police_personnel?select=discord_user_id&unit=in.(POLICIA,UCOP,CIC)&limit=500");
     const ids = (personnel ?? []).map((row: any) => String(row.discord_user_id)).filter((id: string) => validDiscordId(id));
     if (!ids.length) return json({ ok: true, history: [] });
     const rows = await db("police_rank_history?select=discord_user_id,discord_username,full_name,action_type,previous_rank_name,new_rank_name,reason,changed_by_discord_id,changed_by_name,created_at&discord_user_id=in.(" + ids.join(",") + ")&order=created_at.desc&limit=200");
@@ -382,7 +383,7 @@ async function reviewRankRequest(req: Request) {
       const targetId = String(rankRequest.discord_user_id);
       const profiles = await db("police_personnel?select=*&discord_user_id=eq." + enc(targetId) + "&limit=1");
       const profile = profiles?.[0];
-      if (profile?.unit && !BRANCH_ROLES[profile.unit]) return json({ error: "El miembro pertenece a otra unidad." }, 409);
+      if (profile?.unit && !VALID_UNITS.has(profile.unit)) return json({ error: "El miembro pertenece a otra unidad." }, 409);
       const member = await discord("/guilds/" + GUILD_ID + "/members/" + enc(targetId)) as any;
       const memberRoles: string[] = member.roles ?? [];
       if ((!memberRoles.includes(PRESELECTION_ROLE_ID) && !memberRoles.includes(POLICE_ROLE_ID)) || memberRoles.includes(EXPELLED_ROLE_ID)) return json({ error: "La persona debe estar preseleccionada para aprobar el ingreso." }, 409);
@@ -392,7 +393,7 @@ async function reviewRankRequest(req: Request) {
         if (addedPoliceRole) await discord("/guilds/" + GUILD_ID + "/members/" + enc(targetId) + "/roles/" + POLICE_ROLE_ID, { method: "PUT", body: "{}" });
         try { await updatePersonnelNickname(targetId, String(rankRequest.character_name), String(rankRequest.plate), "PRIME POLICE: ingreso aprobado tras entrevista IC"); nicknameChanged = true; }
         catch (error) { if (!String(error).includes("Discord API 403")) throw error; nicknameWarning = " Discord no permitió cambiar el apodo de este usuario; debe ajustarlo manualmente o revisar la jerarquía del bot."; console.warn("Intake nickname forbidden", targetId); }
-        await db("police_personnel?on_conflict=discord_user_id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=representation" }, body: JSON.stringify({ discord_user_id: targetId, discord_username: rankRequest.discord_username, full_name: rankRequest.character_name, name_ooc: profile?.name_ooc || rankRequest.discord_username, steam_username: rankRequest.steam_username || profile?.steam_username || "", plate: rankRequest.plate, unit: profile?.unit || (memberRoles.includes(CIC_ROLE_ID) ? "CIC" : "UCOP"), rank_name: profile?.rank_name || "Pendiente de asignación", rank_role_id: profile?.rank_role_id || null, status: "active", updated_at: new Date().toISOString() }) });
+        await db("police_personnel?on_conflict=discord_user_id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=representation" }, body: JSON.stringify({ discord_user_id: targetId, discord_username: rankRequest.discord_username, full_name: rankRequest.character_name, name_ooc: profile?.name_ooc || rankRequest.discord_username, steam_username: rankRequest.steam_username || profile?.steam_username || "", plate: rankRequest.plate, unit: profile?.unit || (memberRoles.includes(BRANCH_ROLES.UCOP) ? "UCOP" : memberRoles.includes(CIC_ROLE_ID) ? "CIC" : "POLICIA"), rank_name: profile?.rank_name || "Pendiente de asignación", rank_role_id: profile?.rank_role_id || null, status: "active", updated_at: new Date().toISOString() }) });
       } catch (error) {
         try {
           if (nicknameChanged) await discord("/guilds/" + GUILD_ID + "/members/" + enc(targetId), { method: "PATCH", body: JSON.stringify({ nick: member.nick ?? null }) });
@@ -523,7 +524,7 @@ async function changeRank(req: Request) {
     if (!targetRank) return json({ error: "El rango elegido no está en la escala autorizada." }, 400);
     const [guildMember, profiles] = await Promise.all([
       discord("/guilds/" + GUILD_ID + "/members/" + enc(targetId)),
-      db("police_personnel?select=*&discord_user_id=eq." + enc(targetId) + "&unit=in.(UCOP,CIC)&limit=1"),
+      db("police_personnel?select=*&discord_user_id=eq." + enc(targetId) + "&unit=in.(POLICIA,UCOP,CIC)&limit=1"),
     ]);
     member = guildMember;
     target = member;
@@ -550,13 +551,13 @@ async function changeRank(req: Request) {
     if (!memberRoles.includes(targetRoleId)) { await discord("/guilds/" + GUILD_ID + "/members/" + enc(targetId) + "/roles/" + targetRoleId, { method: "PUT", body: "{}" }); addedTargetRole = true; }
     didChangeDiscord = true;
     for (const roleId of oldRoles) await discord("/guilds/" + GUILD_ID + "/members/" + enc(targetId) + "/roles/" + roleId, { method: "DELETE" });
-    restoreBranch = await syncPersonnelBranch(targetId, priorProfile.unit || "UCOP", memberRoles);
+    restoreBranch = await syncPersonnelBranch(targetId, priorProfile.unit || "POLICIA", memberRoles);
     await updatePersonnelNickname(targetId, fullName, requestedPlate || String(priorProfile.plate || ""), "PRIME POLICE UCOP: sincronización de nombre IC y placa al cambiar rango"); nicknameChanged = true;
     const now = new Date().toISOString();
     const effectiveAt = effectiveDate.toISOString();
     const updated = {
       discord_user_id: targetId, discord_username: username, full_name: fullName,
-      plate: requestedPlate || priorProfile.plate || "", unit: priorProfile.unit || "UCOP", name_ooc: requestedOoc || priorProfile.name_ooc || "", rank_name: String(targetRank.role_name), rank_role_id: targetRoleId,
+      plate: requestedPlate || priorProfile.plate || "", unit: priorProfile.unit || "POLICIA", name_ooc: requestedOoc || priorProfile.name_ooc || "", rank_name: String(targetRank.role_name), rank_role_id: targetRoleId,
       status: "active", source_application_id: priorProfile?.source_application_id ?? null,
       created_at: priorProfile?.created_at ?? now, updated_at: now, last_rank_change_at: effectiveAt,
     };
@@ -645,7 +646,7 @@ export async function handleHr(req: Request, action: string): Promise<Response |
       const from=new Date(params.get("from")||Date.now()-7*86400000),to=new Date(params.get("to")||Date.now());if(!Number.isFinite(from.getTime())||!Number.isFinite(to.getTime())||from>=to)return json({error:"Rango de fechas inválido."},400);
       let filter="&started_at=lt."+enc(to.toISOString())+"&or=(ended_at.is.null,ended_at.gte."+enc(from.toISOString())+")";
       if(params.get("state")==="open")filter+="&ended_at=is.null";if(params.get("state")==="history")filter+="&ended_at=not.is.null";
-      const unit=params.get("unit");if(unit&&["UCOP","CIC"].includes(unit))filter+="&unit=eq."+unit;
+      const unit=params.get("unit");if(unit&&["POLICIA","UCOP","CIC"].includes(unit))filter+="&unit=eq."+unit;
       const search=(params.get("search")||"").trim().replace(/[^\p{L}\p{N}\s]/gu,"").slice(0,100);if(search)filter+="&and=(or(full_name.ilike.*"+enc(search)+"*,plate.ilike.*"+enc(search)+"*))";
       const shifts=await db("police_duty_shifts?select=*&order=started_at.desc,id.desc&limit=51&offset="+offset+filter);return json({ok:true,shifts:shifts.slice(0,50),next_offset:shifts.length>50?offset+50:null}); }
     catch (error) { console.error("Shifts read:",String(error)); return json({ error: "No se pudieron cargar las bitácoras. Comprueba la migración de turnos." },502); }

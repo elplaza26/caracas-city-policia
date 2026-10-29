@@ -157,7 +157,7 @@ async function handle(i:any){
     if(!(member.roles||[]).includes(POLICE_ROLE_ID)||(member.roles||[]).includes(EXPELLED_ROLE_ID)){await editInteractionReply(i,"Debes tener el rol Policía para registrar servicio.");return;}
     if(i.data.custom_id==="prime_duty_start"){
      const profiles=await db("police_personnel?select=full_name,plate,unit&discord_user_id=eq."+encodeURIComponent(userId)+"&status=eq.active&limit=1");
-     const p=profiles?.[0];if(!p||!["UCOP","CIC"].includes(p.unit)){await editInteractionReply(i,"RR. HH. debe completar tu ficha policial antes de registrar servicio.");return;}
+     const p=profiles?.[0];if(!p||!["POLICIA","UCOP","CIC"].includes(p.unit)){await editInteractionReply(i,"RR. HH. debe completar tu ficha policial antes de registrar servicio.");return;}
      try{await db("police_duty_shifts",{method:"POST",body:JSON.stringify({discord_user_id:userId,full_name:p.full_name,plate:p.plate||"",unit:p.unit})});}
      catch(error){if(String(error).includes("409")){await editInteractionReply(i,"Ya tienes una bitácora abierta. Registra la salida antes de volver a entrar.");return;}throw error;}
      await editInteractionReply(i,"🟢 Entrada registrada. Tu bitácora está abierta.");
@@ -194,7 +194,7 @@ async function handle(i:any){
 }
 Deno.serve(async(req:Request)=>{
  if(req.method==="OPTIONS")return new Response(null,{status:204,headers:CORS});
- if(req.method==="GET")return json({ok:true,service:"PRIME POLICE Discord applications",release:"duty-immediate-private-ack-2026-10-28g",duty_service:true,configured:{discord:Boolean(BOT_TOKEN),database:Boolean(SUPABASE_URL&&SERVICE_KEY),public_key:Boolean(DISCORD_PUBLIC_KEY)},application_id:APPLICATION_ID,guild_id:GUILD_ID,commands:["publicar_postulaciones","postulacion","traslado"],message:DISCORD_PUBLIC_KEY?"Endpoint disponible.":"Falta configurar DISCORD_PUBLIC_KEY en los secretos de Supabase."});
+ if(req.method==="GET")return json({ok:true,service:"PRIME POLICE Discord applications",release:"duty-neutral-branch-2026-10-29a",duty_service:true,configured:{discord:Boolean(BOT_TOKEN),database:Boolean(SUPABASE_URL&&SERVICE_KEY),public_key:Boolean(DISCORD_PUBLIC_KEY)},application_id:APPLICATION_ID,guild_id:GUILD_ID,commands:["publicar_postulaciones","postulacion","traslado"],message:DISCORD_PUBLIC_KEY?"Endpoint disponible.":"Falta configurar DISCORD_PUBLIC_KEY en los secretos de Supabase."});
  if(req.method!=="POST")return json({error:"Method not allowed"},405);
  const body=await req.text();if(!await validSignature(req,body))return json({error:"Invalid Discord signature or DISCORD_PUBLIC_KEY not configured"},401);
  let i:any;try{i=JSON.parse(body)}catch{return json({error:"Invalid JSON"},400)}
