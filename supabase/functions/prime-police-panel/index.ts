@@ -6,7 +6,7 @@ import { preparePlate } from "./plates.ts";
 import { managePersonnelProfile } from "./personnel-profile.ts";
 import { manageAbsences } from "./absences.ts";
 import { listPagedRecords } from "./paged-records.ts";
-import { createPanelSession, authenticatePanelSession, sessionRoutes, rateLimitRequest } from "./panel-sessions.ts";
+import { SESSION_LIFETIME_SECONDS, createPanelSession, authenticatePanelSession, sessionRoutes, rateLimitRequest } from "./panel-sessions.ts";
 import { discordRequest, discordFailure } from "./discord-client.ts";
 import { interceptChanges } from "./change-requests.ts";
 import { writeAudit } from "./audit-events.ts";
@@ -162,7 +162,7 @@ async function login(req: Request) {
       { method: "PATCH", body: JSON.stringify({ used_at: new Date().toISOString() }) },
     );
     if (!consumed?.length) return json({ error: "Ese código ya se utilizó. Genera uno nuevo en Discord." }, 409);
-    return json({ token: await signSession(row.discord_user_id,req), expires_in: 43200 });
+    return json({ token: await signSession(row.discord_user_id,req), expires_in: SESSION_LIFETIME_SECONDS });
   } catch (e) {
     console.error("Panel login error:", String(e));
     return json({ error: "No se pudo iniciar sesión. Revisa la configuración del servidor." }, 500);

@@ -1,6 +1,6 @@
 const encoder=new TextEncoder();
-const SESSION_LIFETIME_SECONDS=12*60*60;
-const SESSION_IDLE_MS=2*60*60*1000;
+export const SESSION_LIFETIME_SECONDS=7*24*60*60;
+const SESSION_IDLE_MS=24*60*60*1000;
 type Session={sub:string,sid:string,exp:number};
 const checks=new WeakMap<Request,Promise<Session|null>>();
 const encode=(bytes:Uint8Array)=>btoa(Array.from(bytes,b=>String.fromCharCode(b)).join('')).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
