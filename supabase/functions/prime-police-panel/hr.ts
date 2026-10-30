@@ -463,6 +463,8 @@ async function admitPreselection(req:Request){
  const auth=await allowed(req);if(auth.error)return auth.error;
  let body:any;try{body=await req.json();}catch{return json({error:'Datos inválidos.'},400);}
  const target=String(body.discord_user_id||''),operation=String(body.operation_id||''),name=String(body.full_name||'').trim().replace(/\s+/g,' '),plate=String(body.plate||'').trim(),steam=String(body.steam_username||'').trim(),approvedBy=String(body.approved_by_name||'').replace(/@/g,'').trim();
+ const rankRoleId=String(body.rank_role_id||'').trim();
+ if((rankRoleId&&!validDiscordId(rankRoleId))||(body.unit!==undefined&&!VALID_UNITS.has(String(body.unit))))return json({error:'Selecciona una división y un rango válidos.'},400);
  if(!validDiscordId(target)||!/^[a-f0-9-]{36}$/i.test(operation)||!name||name.length>100||!plate||plate.length>30||!steam||steam.length>100||!approvedBy||approvedBy.length>100||body.interview_confirmed!==true)return json({error:'Completa nombre IC, placa, Steam y quién aprobó la entrevista IC. Confirma que la entrevista está aprobada.'},400);
  try{
   const prior=await db('police_rank_requests?select=discord_user_id,status,review_reason&id=eq.'+enc(operation)+'&limit=1');
@@ -474,20 +476,30 @@ async function admitPreselection(req:Request){
   const plates=await db('police_personnel?select=discord_user_id&plate=eq.'+enc(plate)+'&status=eq.active&limit=1');if(plates?.length)return json({error:'La placa ya pertenece a otro agente activo.'},409);
   const member=await discord('/guilds/'+GUILD_ID+'/members/'+target) as any,roles:string[]=member.roles||[];
   if(roles.includes(EXPELLED_ROLE_ID)||(!roles.includes(PRESELECTION_ROLE_ID)&&!roles.includes(POLICE_ROLE_ID)))return json({error:'La persona debe tener Preselección o Policía y no estar expulsada.'},409);
+  const unit=String(body.unit??(roles.includes(BRANCH_ROLES.UCOP)?'UCOP':roles.includes(CIC_ROLE_ID)?'CIC':'POLICIA'));
+  const configuredRanks=await db('police_rank_roles?select=role_id,role_name,rank_order&order=rank_order.asc');
+  const rank=rankRoleId?(configuredRanks||[]).find((r:any)=>r.role_id===rankRoleId):null;
+  if(rankRoleId&&!rank)return json({error:'El rango ya no está configurado. Actualiza y vuelve a elegirlo.'},400);
+  if(rankRoleId){const liveRoles=await discord('/guilds/'+GUILD_ID+'/roles') as any[];if(!isAssignableRankRole(liveRoles.find(r=>r.id===rankRoleId)))return json({error:'Ese rol no puede asignarse como rango policial.'},400);}
   const addedPolice=!roles.includes(POLICE_ROLE_ID);let nicknameChanged=false;const warnings:string[]=[];
+  let restoreBranch:(()=>Promise<void>)|null=null;const addedRanks:string[]=[],removedRanks:string[]=[];
+  const rollback=async()=>{if(restoreBranch)await restoreBranch();for(const role of removedRanks)await discord('/guilds/'+GUILD_ID+'/members/'+target+'/roles/'+role,{method:'PUT',body:'{}'});for(const role of addedRanks)await discord('/guilds/'+GUILD_ID+'/members/'+target+'/roles/'+role,{method:'DELETE'});if(nicknameChanged)await discord('/guilds/'+GUILD_ID+'/members/'+target,{method:'PATCH',body:JSON.stringify({nick:member.nick??null})});if(addedPolice)await discord('/guilds/'+GUILD_ID+'/members/'+target+'/roles/'+POLICE_ROLE_ID,{method:'DELETE'});};
   try{
    if(addedPolice)await discord('/guilds/'+GUILD_ID+'/members/'+target+'/roles/'+POLICE_ROLE_ID,{method:'PUT',body:'{}'});
+   if(rankRoleId&&!roles.includes(rankRoleId)){await discord('/guilds/'+GUILD_ID+'/members/'+target+'/roles/'+rankRoleId,{method:'PUT',body:'{}'});addedRanks.push(rankRoleId);}
+   for(const old of configuredRanks||[])if(old.role_id!==rankRoleId&&roles.includes(old.role_id)&&!PROTECTED_ROLE_IDS.has(old.role_id)){await discord('/guilds/'+GUILD_ID+'/members/'+target+'/roles/'+old.role_id,{method:'DELETE'});removedRanks.push(old.role_id);}
+   restoreBranch=await syncPersonnelBranch(target,unit,roles);
    try{await updatePersonnelNickname(target,name,plate,'PRIME POLICE: ingreso administrativo tras entrevista IC');nicknameChanged=true;}
    catch(error){if(!String(error).includes('403'))throw error;warnings.push('Discord no permitió cambiar el apodo. Revisa la jerarquía del bot; el propietario debe cambiarlo manualmente.');}
-  }catch(error){if(addedPolice)try{await discord('/guilds/'+GUILD_ID+'/members/'+target+'/roles/'+POLICE_ROLE_ID,{method:'DELETE'});}catch{}throw error;}
+  }catch(error){try{await rollback();}catch{console.error('Admission role rollback failed');}throw error;}
   const actor=requestMembers.get(req);const actorName=String(actor?.nick||actor?.user?.global_name||actor?.user?.username||auth.userId);
   let result:any;
-  try{result=await db('rpc/admit_police_preselection',{method:'POST',body:JSON.stringify({p_user:target,p_operation:operation,p_actor:auth.userId,p_name:name,p_plate:plate,p_steam:steam,p_approved_by:approvedBy,p_unit:roles.includes(BRANCH_ROLES.UCOP)?'UCOP':roles.includes(CIC_ROLE_ID)?'CIC':'POLICIA',p_expected_updated_at:body.expected_updated_at||null,p_actor_name:actorName})});}
+  try{result=await db('rpc/admit_police_preselection_with_rank',{method:'POST',body:JSON.stringify({p_user:target,p_operation:operation,p_actor:auth.userId,p_name:name,p_plate:plate,p_steam:steam,p_approved_by:approvedBy,p_unit:unit,p_expected_updated_at:body.expected_updated_at||null,p_actor_name:actorName,p_rank_role_id:rankRoleId||null})});}
   catch(error){console.error('Administrative admission confirmation failed:',String(error));return json({error:'No se pudo confirmar el ingreso en la base. Discord podría haberse actualizado. Revisa Personal y Preseleccionados antes de repetir; conserva este formulario si necesitas reintentar.'},503);}
-  if(!result.ok){try{if(nicknameChanged)await discord('/guilds/'+GUILD_ID+'/members/'+target,{method:'PATCH',body:JSON.stringify({nick:member.nick??null})});if(addedPolice)await discord('/guilds/'+GUILD_ID+'/members/'+target+'/roles/'+POLICE_ROLE_ID,{method:'DELETE'});}catch{warnings.push('Revisa los roles y el apodo en Discord.');}return json({error:[result.error,...warnings].join(' ')},409);}
+  if(!result.ok){try{await rollback();}catch{warnings.push('Revisa los roles y el apodo en Discord.');}return json({error:[result.error,...warnings].join(' ')},409);}
   if(roles.includes(PRESELECTION_ROLE_ID))try{await discord('/guilds/'+GUILD_ID+'/members/'+target+'/roles/'+PRESELECTION_ROLE_ID,{method:'DELETE'});}catch{warnings.push('La ficha ya está creada, pero no se pudo retirar Preselección en Discord.');}
-  if(!result.existing)try{await discord('/channels/'+RANK_AUDIT_CHANNEL_ID+'/messages',{method:'POST',body:JSON.stringify({embeds:[{title:'🛡️ PRIME POLICE · Ingreso administrativo',color:0x4d98c9,fields:[{name:'Cuenta de Discord',value:'<@'+target+'>'},{name:'Nombre IC',value:name},{name:'Placa',value:plate},{name:'Usuario de Steam',value:steam},{name:'Entrevista IC aprobada por',value:approvedBy},{name:'Registrado por',value:actorName}],footer:{text:'PRIME POLICE · Desde Preseleccionados'}}],allowed_mentions:{parse:[]}})});}catch{warnings.push('No se pudo publicar el aviso de Discord; el ingreso y la auditoría de la web están guardados.');}
-  return json({ok:true,personnel:result.personnel,message:'Agente incorporado a Personal. Rol Policía asignado; rama y rango se gestionan desde su ficha.',warning:warnings.join(' ')||undefined});
+  if(!result.existing)try{await discord('/channels/'+RANK_AUDIT_CHANNEL_ID+'/messages',{method:'POST',body:JSON.stringify({embeds:[{title:'🛡️ PRIME POLICE · Ingreso administrativo',color:0x4d98c9,fields:[{name:'Cuenta de Discord',value:'<@'+target+'>'},{name:'Nombre IC',value:name},{name:'Placa',value:plate},{name:'Usuario de Steam',value:steam},{name:'División',value:unit==='POLICIA'?'Sin rama · Policía':unit},{name:'Rango',value:rank?.role_name||'Pendiente de asignación'},{name:'Entrevista IC aprobada por',value:approvedBy},{name:'Registrado por',value:actorName}],footer:{text:'PRIME POLICE · Desde Preseleccionados'}}],allowed_mentions:{parse:[]}})});}catch{warnings.push('No se pudo publicar el aviso de Discord; el ingreso y la auditoría de la web están guardados.');}
+  return json({ok:true,personnel:result.personnel,message:'Agente incorporado a Personal con Policía, división '+(unit==='POLICIA'?'Sin rama':unit)+' y '+(rank?.role_name||'rango pendiente')+'.',warning:warnings.join(' ')||undefined});
  }catch(error){console.error('Preselection admission:',String(error));const upstream=discordFailure(error);return upstream?json(upstream.body,upstream.status):json({error:'No se pudo completar el ingreso. Revisa el registro antes de reintentar.'},502);}
 }
 

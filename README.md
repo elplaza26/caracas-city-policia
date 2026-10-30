@@ -13,7 +13,7 @@ Panel privado de gestión de personal de PRIME POLICE, orientado a UCOP y RR. HH
 
 ## Ingreso administrativo desde Preseleccionados
 
-Cada fila de Preseleccionados ofrece Ingresar a la base. El gestor corrige el nombre IC, añade placa y Steam y confirma quién aprobó la entrevista IC. Directiva puede aplicarlo directamente; los demás gestores preparan la propuesta para Pendientes. El servidor verifica la preselección activa, el rol de Discord y la ausencia de ficha o placa duplicadas. Se asigna únicamente Policía y el apodo Nombre IC #placa; rama y rango se administran después en Personal.
+Cada fila de Preseleccionados ofrece Ingresar a la base. El gestor corrige el nombre IC, añade placa y Steam y confirma quién aprobó la entrevista IC. Directiva puede aplicarlo directamente; los demás gestores preparan la propuesta para Pendientes. El servidor verifica la preselección activa, el rol de Discord y la ausencia de ficha o placa duplicadas. Se asignan Policía, la división seleccionada (Sin rama, UCOP o CIC), el rango inicial elegido y el apodo Nombre IC #placa. El rango puede dejarse pendiente. La migración `20261030011121_preselection_admission_rank_and_branch.sql` guarda la división y el rango con el ingreso y registra su asignación inicial en el historial.
 
 La migración `20261029143459_preselection_administrative_ingress.sql` guarda en una transacción la ficha, la conversión de la preselección, el ingreso administrativo aceptado y la auditoría. El identificador de operación impide duplicados al reintentar. Un fallo incierto de conexión no revierte roles de un ingreso que podría estar ya guardado; la interfaz conserva los datos y pide comprobar el registro.
 

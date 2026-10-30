@@ -51,7 +51,7 @@ async function snapshot(action:string,payload:any,c:Context){
   const member=await c.discord('/guilds/1539970134469378068/members/'+encodeURIComponent(target));state.roles=[...(member.roles||[])].sort();state.nickname=member.nick||null;
  }
  if(action==='sanction')state.sanctions=await c.db('police_sanctions?select=id,level,action_type,status,active&discord_user_id=eq.'+encodeURIComponent(target)+'&order=id.asc');
- if(action==='rank-change'||action==='personnel-register')state.ranks=await c.db('police_rank_roles?select=role_id,rank_order,role_name&order=rank_order.asc');
+ if(action==='rank-change'||action==='personnel-register'||action==='preselection-admit')state.ranks=await c.db('police_rank_roles?select=role_id,rank_order,role_name&order=rank_order.asc');
  return{resource:'personnel:'+target,state};
 }
 async function readBody(req:Request){const text=await req.clone().text();if(text.length>48000)throw Error('La solicitud es demasiado larga.');const body=JSON.parse(text);if(!body||typeof body!=='object'||Array.isArray(body))throw Error('Solicitud inválida.');return body;}
