@@ -1,4 +1,5 @@
 import { parseApplicationIdentity } from "../_shared/application-identity.ts";
+import { syncRejectionRole } from "./rejection-roles.ts";
 import { PANEL_SITE_URL, PANEL_ORIGIN, isPanelOrigin, panelResponseHeaders } from "./site-config.ts";
 import { scheduleAcceptedPublicList } from "./public-accepted.ts";
 import { preparePlate } from "./plates.ts";
@@ -387,6 +388,7 @@ async function decide(req: Request) {
   let app: any;
   let finalApp: any;
   let preselectionSynced = true;
+  let rejectionRoleWarning = "";
   let isNewDecision = false;
   let nicknameWarning = "";
   try {
@@ -461,6 +463,7 @@ async function decide(req: Request) {
       return json({ error: "La candidatura cambió durante la operación. Actualiza la lista antes de volver a intentarlo." }, 409);
     }
     finalApp = updated[0];
+    if (action === "reject") rejectionRoleWarning = await syncRejectionRole(GUILD_ID, String(app.discord_user_id), Number(app.attempt_number || 1), discord);
     if (action === "accept") {
       nicknameWarning = await setCandidateNickname(String(app.discord_user_id), app.full_name);
       try {
@@ -487,6 +490,7 @@ async function decide(req: Request) {
         {name:'Discord ID',value:String(app.discord_user_id)},
         {name:'Decisión por',value:reviewerName},
         {name:'Intento',value:String(app.attempt_number||1)+'/3'},
+        {name:'Rol de rechazo',value:rejectionRoleWarning || ('Rechazado '+String(app.attempt_number||1)+' sincronizado')},
         ...(reason?[{name:'Motivo',value:reason}]:[])
       ],
       action==='accept'?'PRIME POLICE · RR. HH. · Selección y entrevistas':'PRIME POLICE · Auditoría UCOP'
@@ -536,7 +540,7 @@ async function decide(req: Request) {
     role_assigned: action === "accept" && Boolean(finalApp.role_assigned_at),
     nickname_updated: action === "accept" ? !nicknameWarning : undefined,
     results_notified: resultsNotified,
-    warning: [nicknameWarning, !preselectionSynced
+    warning: [nicknameWarning, rejectionRoleWarning, !preselectionSynced
       ? "La candidatura se aceptó, pero no se guardó en la base de preseleccionados. Avísale a un administrador para revisar el registro."
       : "", resultsNotified ? "" : "La decisión se guardó, pero no se pudo enviar por privado. Comprueba que la persona permita mensajes directos."].filter(Boolean).join(" ") || undefined,
   });

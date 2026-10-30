@@ -44,6 +44,7 @@ jobs:
           npm ci --ignore-scripts
           node scripts/check-application-identity.mjs
           node --experimental-strip-types scripts/check-panel-origins.mjs
+          node --experimental-strip-types scripts/check-rejection-roles.mjs
           npm run build
           node scripts/check-public-build.mjs
       - name: Upload site

@@ -113,3 +113,7 @@ Las observaciones se añaden, editan y archivan con autor, fecha y control de ve
 ## Integridad de la web publicada
 
 El compilador calcula integridad SHA-384 para JavaScript y CSS. La política CSP de producción autoriza únicamente el hash del programa generado y bloquea manejadores de eventos inline; los elementos incluyen SRI para detectar archivos alterados. Esto protege la carga de recursos y no impide descargar el código público ni protege frente a un atacante que controle también el HTML. Los originales continúan visibles mientras el repositorio sea público.
+
+## Roles por rechazo de postulación
+
+Al guardar un nuevo rechazo se sincroniza Rechazado 1 (1565810468059357194), Rechazado 2 (1565810639178567821) o Rechazado 3 (1565810696266981407), según el número de intento de la candidatura guardada. Primero se añade el nuevo marcador y después se retiran los otros marcadores de rechazo, sin tocar otros roles. Los fallos de Discord se muestran como advertencia y se incluyen en la auditoría; no revierten una decisión ya guardada. No se modifican rechazos históricos, traslados ni las esperas de 12/48 horas.
