@@ -1,5 +1,19 @@
 export const REJECTION_ROLE_IDS = ['1565810468059357194', '1565810639178567821', '1565810696266981407'];
 
+export async function clearRejectionRoles(guildId: string, userId: string, discord: (path: string, init?: RequestInit) => Promise<any>): Promise<string> {
+  const base = '/guilds/' + guildId + '/members/' + encodeURIComponent(userId);
+  try {
+    const member = await discord(base);
+    for (const role of REJECTION_ROLE_IDS) {
+      if ((member.roles || []).includes(role)) await discord(base + '/roles/' + role, {method: 'DELETE'});
+    }
+    return '';
+  } catch (error) {
+    console.error('Accepted application rejection role cleanup failed:', String(error));
+    return 'La aceptación se guardó, pero no se pudieron retirar todos los roles de rechazado en Discord. Revisa los permisos y la jerarquía del bot.';
+  }
+}
+
 export async function syncRejectionRole(guildId: string, userId: string, attempt: number, discord: (path: string, init?: RequestInit) => Promise<any>): Promise<string> {
   if (![1, 2, 3].includes(attempt)) return 'El rechazo se guardó, pero el número de intento no permite asignar un rol.';
   const target = REJECTION_ROLE_IDS[attempt - 1];

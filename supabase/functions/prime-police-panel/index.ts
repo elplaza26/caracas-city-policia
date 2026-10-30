@@ -1,5 +1,5 @@
 import { parseApplicationIdentity } from "../_shared/application-identity.ts";
-import { syncRejectionRole } from "./rejection-roles.ts";
+import { syncRejectionRole, clearRejectionRoles } from "./rejection-roles.ts";
 import { PANEL_SITE_URL, PANEL_ORIGIN, isPanelOrigin, panelResponseHeaders } from "./site-config.ts";
 import { scheduleAcceptedPublicList } from "./public-accepted.ts";
 import { preparePlate } from "./plates.ts";
@@ -347,7 +347,7 @@ async function decideTransfer(req: Request) {
     const now = new Date().toISOString();
     const updated = await db("police_transfer_applications?id=eq." + encodeURIComponent(id) + "&status=eq.pending", { method: "PATCH", body: JSON.stringify({ status: action === "accept" ? "accepted" : "rejected", decision_reason: reason, reviewed_by_discord_id: reviewerId, reviewed_by_name: reviewerName, reviewed_at: now, ...(action === "accept" ? { role_assigned_at: now } : {}) }) });
     if (!updated?.length) return json({ error: "La solicitud cambió durante la revisión. Actualiza la lista." }, 409);
-    const rejectionRoleWarning = action === "reject" ? await syncRejectionRole(GUILD_ID, String(item.discord_user_id), Number(item.attempt_number || 1), discord) : "";
+    const rejectionRoleWarning = action === "reject" ? await syncRejectionRole(GUILD_ID, String(item.discord_user_id), Number(item.attempt_number || 1), discord) : await clearRejectionRoles(GUILD_ID, String(item.discord_user_id), discord);
     if(action==='accept')scheduleAcceptedPublicList();
     const nicknameWarning = action === "accept" ? await setCandidateNickname(String(item.discord_user_id), item.full_name) : "";
     await postAuditLog(action === "accept" ? "✅ Traslado aceptado" : "❌ Traslado rechazado", action === "accept" ? 0x45b879 : 0xe87979, [
@@ -466,6 +466,7 @@ async function decide(req: Request) {
     }
     finalApp = updated[0];
     if (action === "reject") rejectionRoleWarning = await syncRejectionRole(GUILD_ID, String(app.discord_user_id), Number(app.attempt_number || 1), discord);
+    else rejectionRoleWarning = await clearRejectionRoles(GUILD_ID, String(app.discord_user_id), discord);
     if (action === "accept") {
       nicknameWarning = await setCandidateNickname(String(app.discord_user_id), app.full_name);
       try {

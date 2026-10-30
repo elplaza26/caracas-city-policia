@@ -117,3 +117,5 @@ El compilador calcula integridad SHA-384 para JavaScript y CSS. La política CSP
 ## Roles por rechazo de postulación
 
 Al guardar un nuevo rechazo se sincroniza Rechazado 1 (1565810468059357194), Rechazado 2 (1565810639178567821) o Rechazado 3 (1565810696266981407), según el número de intento de la candidatura guardada. Primero se añade el nuevo marcador y después se retiran los otros marcadores de rechazo, sin tocar otros roles. Los fallos de Discord se muestran como advertencia y se incluyen en la auditoría; no revierten una decisión ya guardada. Se aplica tanto a postulaciones como a traslados; no cambia los plazos de espera. La actualización administrativa del historial elige el mayor intento rechazado por persona y excluye a quienes fueron aceptados después; comprueba los roles resultantes y registra la operación en auditoría.
+
+Al aceptar una postulación o un traslado se retiran los tres marcadores de rechazo después de guardar la aceptación, conservando los demás roles. Si Discord no permite completar la limpieza, la web informa con una advertencia sin convertir una aceptación guardada en un error.

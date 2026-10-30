@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {REJECTION_ROLE_IDS, syncRejectionRole} from '../supabase/functions/prime-police-panel/rejection-roles.ts';
+import {REJECTION_ROLE_IDS, syncRejectionRole, clearRejectionRoles} from '../supabase/functions/prime-police-panel/rejection-roles.ts';
 for (const attempt of [1, 2, 3]) {
   const roles = new Set(['unrelated', ...REJECTION_ROLE_IDS.slice(0, attempt - 1)]);
   const calls = [];
@@ -26,3 +26,9 @@ let invalidCalled = false;
 assert(await syncRejectionRole('guild', 'user', 4, async () => {invalidCalled = true;}));
 assert.equal(invalidCalled, false);
 console.log('Rejection roles 1/2/3, replacement, unrelated roles, retries and Discord failure: PASS');
+const acceptedRoles = new Set(['unrelated', ...REJECTION_ROLE_IDS]);
+const cleanup = async (url, init) => {if(!init)return {roles:[...acceptedRoles]};assert.equal(init.method,'DELETE');acceptedRoles.delete(url.split('/').pop());};
+assert.equal(await clearRejectionRoles('guild','user',cleanup),'');
+assert.deepEqual([...acceptedRoles],['unrelated']);
+assert.equal(await clearRejectionRoles('guild','user',cleanup),'');
+console.log('Acceptance removes all rejection markers, preserves other roles and tolerates retries: PASS');
