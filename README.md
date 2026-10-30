@@ -25,7 +25,7 @@ El módulo Ausencias tiene un listado por oficial con placa, rango, estado y nú
 
 ## Acceso y datos
 
-Las sesiones del panel usan `PANEL_SESSION_SIGNING_KEY`, independiente del token de Discord, e incluyen un identificador que se valida en el servidor. Caducan en ocho horas o después de treinta minutos sin actividad. Cerrar sesión revoca el registro; Mis sesiones permite revisar dispositivos y cerrar los demás accesos. La actualización invalida los tokens antiguos. La migración `20261029133640_panel_sessions_and_limits.sql` añade las tablas privadas y las funciones de control de sesión y límites de peticiones; ninguna es accesible para anon/authenticated.
+Las sesiones del panel usan `PANEL_SESSION_SIGNING_KEY`, independiente del token de Discord, e incluyen un identificador que se valida en el servidor. Caducan en doce horas o después de dos horas sin actividad. Cerrar sesión revoca el registro; Mis sesiones permite revisar dispositivos y cerrar los demás accesos. La actualización invalida los tokens antiguos. La migración `20261029133640_panel_sessions_and_limits.sql` añade las tablas privadas y las funciones de control de sesión y límites de peticiones; ninguna es accesible para anon/authenticated.
 
 Las listas principales usan `records` con tablas y filtros permitidos explícitamente, búsqueda en el servidor, páginas de 25 registros y contadores completos. El directorio utilizado para seleccionar oficiales se recorre en lotes sin el antiguo límite de 500. El expediente disciplinario consulta solo al agente seleccionado. Las lecturas de rangos comparten una caché de 30 segundos que se invalida al guardar cambios.
 

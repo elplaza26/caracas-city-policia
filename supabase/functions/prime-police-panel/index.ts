@@ -158,7 +158,7 @@ async function login(req: Request) {
       { method: "PATCH", body: JSON.stringify({ used_at: new Date().toISOString() }) },
     );
     if (!consumed?.length) return json({ error: "Ese código ya se utilizó. Genera uno nuevo en Discord." }, 409);
-    return json({ token: await signSession(row.discord_user_id,req), expires_in: 28800 });
+    return json({ token: await signSession(row.discord_user_id,req), expires_in: 43200 });
   } catch (e) {
     console.error("Panel login error:", String(e));
     return json({ error: "No se pudo iniciar sesión. Revisa la configuración del servidor." }, 500);

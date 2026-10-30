@@ -1,4 +1,6 @@
 const encoder=new TextEncoder();
+const SESSION_LIFETIME_SECONDS=12*60*60;
+const SESSION_IDLE_MS=2*60*60*1000;
 type Session={sub:string,sid:string,exp:number};
 const checks=new WeakMap<Request,Promise<Session|null>>();
 const encode=(bytes:Uint8Array)=>btoa(Array.from(bytes,b=>String.fromCharCode(b)).join('')).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
@@ -10,7 +12,7 @@ async function storage(path:string,init:RequestInit={}){
 }
 async function signingKey(usage:KeyUsage[]){const secret=Deno.env.get('PANEL_SESSION_SIGNING_KEY');if(!secret||secret.length<32)throw Error('Panel session signing key unavailable');return crypto.subtle.importKey('raw',encoder.encode(secret),{name:'HMAC',hash:'SHA-256'},false,usage);}
 export async function createPanelSession(userId:string,req:Request){
- const session:Session={sub:userId,sid:crypto.randomUUID(),exp:Math.floor(Date.now()/1000)+28800};
+ const session:Session={sub:userId,sid:crypto.randomUUID(),exp:Math.floor(Date.now()/1000)+SESSION_LIFETIME_SECONDS};
  const payload=encode(encoder.encode(JSON.stringify(session)));
  const signature=encode(new Uint8Array(await crypto.subtle.sign('HMAC',await signingKey(['sign']),encoder.encode(payload))));
  const ua=req.headers.get('user-agent')||'';
@@ -40,7 +42,7 @@ export async function sessionRoutes(req:Request,action:string,json:(v:unknown,st
  const session=await panelSession(req);if(!session)return json({error:'La sesión caducó. Entra nuevamente con Discord.'},401);
  const filter='discord_user_id=eq.'+session.sub;
  if(action==='sessions'){
-  const rows=await storage('police_panel_sessions?select=id,device_label,created_at,last_seen_at&'+filter+'&revoked_at=is.null&expires_at=gt.'+encodeURIComponent(new Date().toISOString())+'&last_seen_at=gt.'+encodeURIComponent(new Date(Date.now()-1800000).toISOString())+'&order=created_at.desc&limit=50');
+  const rows=await storage('police_panel_sessions?select=id,device_label,created_at,last_seen_at&'+filter+'&revoked_at=is.null&expires_at=gt.'+encodeURIComponent(new Date().toISOString())+'&last_seen_at=gt.'+encodeURIComponent(new Date(Date.now()-SESSION_IDLE_MS).toISOString())+'&order=created_at.desc&limit=50');
   return json({ok:true,sessions:rows.map((r:any)=>({...r,current:r.id===session.sid}))});
  }
  await storage('police_panel_sessions?'+filter+(action==='logout'?'&id=eq.':'&id=neq.')+session.sid+'&revoked_at=is.null',{method:'PATCH',body:JSON.stringify({revoked_at:new Date().toISOString()})});
