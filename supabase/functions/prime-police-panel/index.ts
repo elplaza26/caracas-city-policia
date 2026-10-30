@@ -347,6 +347,7 @@ async function decideTransfer(req: Request) {
     const now = new Date().toISOString();
     const updated = await db("police_transfer_applications?id=eq." + encodeURIComponent(id) + "&status=eq.pending", { method: "PATCH", body: JSON.stringify({ status: action === "accept" ? "accepted" : "rejected", decision_reason: reason, reviewed_by_discord_id: reviewerId, reviewed_by_name: reviewerName, reviewed_at: now, ...(action === "accept" ? { role_assigned_at: now } : {}) }) });
     if (!updated?.length) return json({ error: "La solicitud cambió durante la revisión. Actualiza la lista." }, 409);
+    const rejectionRoleWarning = action === "reject" ? await syncRejectionRole(GUILD_ID, String(item.discord_user_id), Number(item.attempt_number || 1), discord) : "";
     if(action==='accept')scheduleAcceptedPublicList();
     const nicknameWarning = action === "accept" ? await setCandidateNickname(String(item.discord_user_id), item.full_name) : "";
     await postAuditLog(action === "accept" ? "✅ Traslado aceptado" : "❌ Traslado rechazado", action === "accept" ? 0x45b879 : 0xe87979, [
@@ -354,6 +355,7 @@ async function decideTransfer(req: Request) {
       { name: "Procedencia", value: String(item.source_city) + " · " + String(item.source_faction) },
       { name: "Discord ID", value: String(item.discord_user_id) },
       { name: "Decisión por", value: reviewerName },
+      ...(action === "reject" ? [{ name: "Intento", value: String(item.attempt_number || 1) + "/3" }, { name: "Rol de rechazo", value: rejectionRoleWarning || ("Rechazado " + String(item.attempt_number || 1) + " sincronizado") }] : []),
       ...(reason ? [{ name: "Motivo", value: reason }] : []),
     ]);
     let notified = false;
@@ -365,7 +367,7 @@ async function decideTransfer(req: Request) {
       await sendPrivateDiscordMessage(String(item.discord_user_id), { embeds: [{ title: accepted ? "🚔 Traslado aceptado · PRIME POLICE" : "📋 Resultado de solicitud de traslado", description, color: accepted ? 0x45b879 : 0xd5ad5a }] });
       notified = true;
     } catch (e) { console.error("Private transfer result DM failed:", String(e)); }
-    return json({ ok: true, status: updated[0].status, role_assigned: action === "accept", nickname_updated: action === "accept" ? !nicknameWarning : undefined, results_notified: notified, warning: [nicknameWarning, notified ? "" : "La decisión se guardó, pero no se pudo enviar el resultado por privado. Comprueba que la persona permita mensajes directos."].filter(Boolean).join(" ") || undefined });
+    return json({ ok: true, status: updated[0].status, role_assigned: action === "accept", nickname_updated: action === "accept" ? !nicknameWarning : undefined, results_notified: notified, warning: [nicknameWarning, rejectionRoleWarning, notified ? "" : "La decisión se guardó, pero no se pudo enviar el resultado por privado. Comprueba que la persona permita mensajes directos."].filter(Boolean).join(" ") || undefined });
   } catch (e) {
     console.error("Transfer decision error:", String(e));
     return json({ error: "No se pudo guardar la decisión." }, 500);
