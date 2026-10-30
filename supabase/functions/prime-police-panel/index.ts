@@ -1,4 +1,5 @@
 import { parseApplicationIdentity } from "../_shared/application-identity.ts";
+import { scheduleAcceptedPublicList } from "./public-accepted.ts";
 import { manageAbsences } from "./absences.ts";
 import { listPagedRecords } from "./paged-records.ts";
 import { createPanelSession, authenticatePanelSession, sessionRoutes, rateLimitRequest } from "./panel-sessions.ts";
@@ -344,6 +345,7 @@ async function decideTransfer(req: Request) {
     const now = new Date().toISOString();
     const updated = await db("police_transfer_applications?id=eq." + encodeURIComponent(id) + "&status=eq.pending", { method: "PATCH", body: JSON.stringify({ status: action === "accept" ? "accepted" : "rejected", decision_reason: reason, reviewed_by_discord_id: reviewerId, reviewed_by_name: reviewerName, reviewed_at: now, ...(action === "accept" ? { role_assigned_at: now } : {}) }) });
     if (!updated?.length) return json({ error: "La solicitud cambió durante la revisión. Actualiza la lista." }, 409);
+    if(action==='accept')scheduleAcceptedPublicList();
     const nicknameWarning = action === "accept" ? await setCandidateNickname(String(item.discord_user_id), item.full_name) : "";
     await postAuditLog(action === "accept" ? "✅ Traslado aceptado" : "❌ Traslado rechazado", action === "accept" ? 0x45b879 : 0xe87979, [
       { name: "Agente", value: String(item.full_name || item.discord_username) },
@@ -493,7 +495,8 @@ async function decide(req: Request) {
     return json({ error: "No se pudo guardar la decisión en la base de datos." }, 500);
   }
 
-  // Application content stays in the protected database and panel; do not publish per-app messages to Discord.
+  if(action==='accept'&&isNewDecision)scheduleAcceptedPublicList();
+  // Full application answers stay private; only names and Discord accounts enter the public list.
   const oldMessageId = String(app.discord_message_id ?? "");
   if (oldMessageId) {
     try {
