@@ -284,6 +284,10 @@ function renderTransfers() {
       const accept=document.createElement("button");accept.className="btn accept";accept.textContent="Aceptar y asignar rol Traslado";accept.onclick=()=>reviewTransfer(item,"accept",accept);
       const reject=document.createElement("button");reject.className="btn reject";reject.textContent="Rechazar";reject.onclick=()=>reviewTransfer(item,"reject",reject);actions.append(accept,reject);
     } else {const done=document.createElement("span");done.className="muted";done.textContent=(item.status==="accepted"?"Rol Traslado asignado · ":"Revisada · ")+niceDate(item.reviewed_at);actions.append(done);}
+    if(item.status==='accepted'){
+      if(item.admitted_at){const entered=document.createElement('span');entered.className='badge accepted';entered.textContent='Ingresado en Personal · '+niceDate(item.admitted_at);actions.append(entered);}
+      else{const enter=document.createElement('button');enter.type='button';enter.className='btn primary';enter.textContent='Ingresar a la base';enter.addEventListener('click',()=>openPreselectionAdmission(item,'transfer'));actions.append(enter);}
+    }
     const spacer=document.createElement("span");spacer.className="spacer";const reviewer=document.createElement("span");reviewer.className="muted";reviewer.textContent=item.reviewed_by_name?"Revisado por "+item.reviewed_by_name:"";actions.append(spacer,reviewer);card.append(head,grid,actions);list.append(card);
   });
 }

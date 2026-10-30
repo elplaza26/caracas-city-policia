@@ -580,7 +580,7 @@ async function routePanel(req: Request): Promise<Response> {
 }
 async function dispatchWithLocks(req:Request):Promise<Response>{
  const action=new URL(req.url).searchParams.get("panel")||"";
- const guarded=["rank-change","personnel-register","preselection-admit","rank-request-review","rank-request-edit","rank-authorization-review","decision","transfer-decision","sanction","sanction-delete","nickname-sync","personnel-delete","shift-close","shift-delete","absence-review","absence-register","rank-config-save","rank-config-import-all"];
+ const guarded=["rank-change","personnel-register","preselection-admit","transfer-admit","rank-request-review","rank-request-edit","rank-authorization-review","decision","transfer-decision","sanction","sanction-delete","nickname-sync","personnel-delete","shift-close","shift-delete","absence-review","absence-register","rank-config-save","rank-config-import-all"];
  if(req.method!=="POST"||!guarded.includes(action))return routePanel(req);
  try{
   if(!await authenticate(req))return json({error:"La sesión caducó. Entra nuevamente con Discord."},401);

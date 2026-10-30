@@ -3,7 +3,7 @@ import { accessMember } from './access-member.ts';
 import { withOperationLock } from './operation-lock.ts';
 import { writeAudit } from './audit-events.ts';
 export const CHANGE_ACTIONS:Record<string,string>={
- 'preselection-admit':'Ingresar preseleccionado a Personal','personnel-register':'Editar o registrar personal','personnel-delete':'Eliminar ficha de personal',
+ 'preselection-admit':'Ingresar preseleccionado a Personal','transfer-admit':'Ingresar traslado aceptado a Personal','personnel-register':'Editar o registrar personal','personnel-delete':'Eliminar ficha de personal',
  'rank-change':'Ascenso o descenso','rank-config-save':'Modificar escala de rangos','rank-config-import-all':'Sincronizar escala con Discord',
  'decision':'Resolver postulación','transfer-decision':'Resolver traslado','rank-request-review':'Resolver nuevo ingreso','rank-request-edit':'Corregir datos de nuevo ingreso',
  'sanction':'Aplicar sanción','sanction-delete':'Eliminar sanción','nickname-sync':'Sincronizar nombre y placa','shift-close':'Cerrar bitácora','shift-delete':'Eliminar bitácora','absence-review':'Revisar ausencia','absence-register':'Registrar ausencia'
@@ -39,6 +39,15 @@ async function snapshot(action:string,payload:any,c:Context){
  if(action==='personnel-register'&&payload.record_action==='create'&&profile?.length)throw new ChangeInputError('Este ID de Discord ya tiene una ficha. Busca al agente en Personal y pulsa Editar.');
  if(action==='personnel-register'&&payload.record_action==='update'&&!profile?.length)throw new ChangeInputError('La ficha ya no existe. Actualiza Personal antes de registrar al agente.');
  const state:any={profile:profile?.[0]||null};
+ if(action==='transfer-admit'){
+  if(profile?.length)throw new ChangeInputError('Ya existe una ficha del agente. Revísala desde Personal.');
+  const transferId=String(payload.transfer_id||'');if(!uuid(transferId))throw new ChangeInputError('Selecciona un traslado válido.');
+  const records=await c.db('police_transfer_applications?select=*&id=eq.'+encodeURIComponent(transferId)+'&limit=1'),transfer=records?.[0];
+  if(!transfer||transfer.discord_user_id!==target||transfer.status!=='accepted'||transfer.admitted_at)throw new ChangeInputError('El traslado ya no está pendiente de ingresar a Personal.');
+  if(payload.expected_reviewed_at&&String(payload.expected_reviewed_at)!==String(transfer.reviewed_at))throw new ChangeInputError('El traslado cambió. Actualiza la lista.');
+  if(!String(payload.full_name||'').trim()||!String(payload.plate||'').trim()||!String(payload.steam_username||'').trim()||!String(payload.approved_by_name||'').trim()||payload.interview_confirmed!==true)throw new ChangeInputError('Completa los datos del ingreso y confirma la entrevista IC.');
+  state.transfer=transfer;
+ }
  if(action==='preselection-admit'){
   if(profile?.length)throw new ChangeInputError('Ya existe una ficha del agente. Revísala desde Personal.');
   const candidates=await c.db('police_preselections?select=*&discord_user_id=eq.'+encodeURIComponent(target)+'&limit=1');const candidate=candidates?.[0];
@@ -51,7 +60,7 @@ async function snapshot(action:string,payload:any,c:Context){
   const member=await c.discord('/guilds/1539970134469378068/members/'+encodeURIComponent(target));state.roles=[...(member.roles||[])].sort();state.nickname=member.nick||null;
  }
  if(action==='sanction')state.sanctions=await c.db('police_sanctions?select=id,level,action_type,status,active&discord_user_id=eq.'+encodeURIComponent(target)+'&order=id.asc');
- if(action==='rank-change'||action==='personnel-register'||action==='preselection-admit')state.ranks=await c.db('police_rank_roles?select=role_id,rank_order,role_name&order=rank_order.asc');
+ if(action==='rank-change'||action==='personnel-register'||action==='preselection-admit'||action==='transfer-admit')state.ranks=await c.db('police_rank_roles?select=role_id,rank_order,role_name&order=rank_order.asc');
  return{resource:'personnel:'+target,state};
 }
 async function readBody(req:Request){const text=await req.clone().text();if(text.length>48000)throw Error('La solicitud es demasiado larga.');const body=JSON.parse(text);if(!body||typeof body!=='object'||Array.isArray(body))throw Error('Solicitud inválida.');return body;}

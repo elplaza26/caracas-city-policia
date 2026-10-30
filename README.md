@@ -93,3 +93,7 @@ La RPC privada `submit_police_application` mantiene el máximo de tres intentos 
 ### Listado público de aceptados
 
 El canal `1564350390294552696` publica dos tarjetas de RR. HH.: postulaciones y traslados aceptados. Solo se muestran nombre IC y cuenta de Discord, sin edades, respuestas, motivos ni datos de revisión. Cada aceptación actualiza las tarjetas en segundo plano; se pagina el listado completo, se deduplican personas por tipo y se editan los mensajes del propio bot, sin menciones ni avisos masivos. `public-accepted.ts` usa un bloqueo compartido y reintentos; los fallos de publicación no invalidan una aceptación ya guardada.
+
+### Ingreso desde Traslados aceptados
+
+Cada traslado aceptado ofrece Ingresar a la base, con el mismo formulario de preseleccionados: nombre IC, placa, Steam, entrevista, división y rango. Directiva ejecuta el ingreso; UCOP prepara una propuesta. El servidor comprueba la solicitud aceptada, su titular y revisión, el rol Traslado/Policía, la ausencia de expulsión y las colisiones de ficha o placa. La RPC privada `admit_police_transfer` guarda ficha, rango inicial, auditoría y marca de ingreso en una transacción. Conserva el traslado aceptado en el historial; un ingreso confirmado no vuelve a ofrecer el botón. Tras guardar se retira el rol Traslado y se conserva Policía, la división, el rango y el apodo Nombre IC #placa.
