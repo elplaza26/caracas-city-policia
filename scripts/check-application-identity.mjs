@@ -6,6 +6,9 @@ import {stripTypeScriptTypes} from 'node:module';
 const serverSource=fs.readFileSync('supabase/functions/_shared/application-identity.ts','utf8');
 const browserSource=fs.readFileSync('app.js','utf8').split('const API_BASE =')[0];
 const cases=[
+ ['Jayden Capone 21 : Jayden 21',{}, {name:'Jayden Capone',ageIc:21,ageOoc:21}],
+ ['Jayden Capone 25: Jayden 19',{}, {name:'Jayden Capone',ageIc:25,ageOoc:19}],
+ ['Jayden Capone 25 / Jayden 19',{}, {name:'Jayden Capone',ageIc:25,ageOoc:19}],
  ['shakul bandido 29 edad oc 18',{}, {name:'shakul bandido',ageIc:29,ageOoc:18}],
  ['Nombre IC: Pedro Martínez | Edad IC: 29 | Edad OOC: 18',{}, {name:'Pedro Martínez',ageIc:29,ageOoc:18}],
  ['María de la Cruz 29 años IC y 18 años ooc',{}, {name:'María de la Cruz',ageIc:29,ageOoc:18}],

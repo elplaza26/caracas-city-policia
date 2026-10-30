@@ -3,9 +3,12 @@ export function parseApplicationIdentity(fullName: unknown, answers: any = {}) {
  const age=(value: unknown)=>/^\d{1,3}$/.test(String(value??'').trim())&&Number(value)>=1&&Number(value)<=120?Number(value):null;
  const ooc=raw.match(/\b(?:edad\s*)?(?:ooc|occ|oc)\s*[:=\-]?\s*(\d{1,3})\b/i)||raw.match(/\b(\d{1,3})\s*(?:años?\s*)?(?:ooc|occ|oc)\b/i);
  const ic=raw.match(/\bedad\s*(?:ic\s*)?[:=\-]?\s*(\d{1,3})\b/i)||raw.match(/\bic\s*[:=\-]\s*(\d{1,3})\b/i)||raw.match(/\b(\d{1,3})\s*(?:años?\s*)?ic\b/i);
+ const paired=raw.match(/^(.+?)\s+(\d{1,3})\s*[:;\/]\s*.*?\b(\d{1,3})\s*$/);
+ const hasPairedAges=Boolean(paired&&age(paired[2])!==null&&age(paired[3])!==null);
  let ageIc=age(answers.age_ic)??age(ic?.[1]),ageOoc=age(answers.age_ooc)??age(ooc?.[1]);
+ if(hasPairedAges){ageIc??=age(paired?.[2]);ageOoc??=age(paired?.[3]);}
  const first=raw.split(/\r?\n|\|/)[0].replace(/^nombre\s*(?:ic)?\s*[:=\-]\s*/i,'').trim();
- const hasAgeHint=/\bedad\b|\baños?\b|\b(?:ooc|occ|oc)\b|\b\d{1,3}\s+ic\b/i.test(raw);
+ const hasAgeHint=hasPairedAges||/\bedad\b|\baños?\b|\b(?:ooc|occ|oc)\b|\b\d{1,3}\s+ic\b/i.test(raw);
  const numbers=[...raw.matchAll(/\b(\d{1,3})\b/g)];
  if(ageIc===null&&numbers.length&&hasAgeHint){
   const candidate=numbers.find(match=>!ooc||match.index!==(ooc.index??0)+ooc[0].indexOf(ooc[1]));
