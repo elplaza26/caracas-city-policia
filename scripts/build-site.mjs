@@ -14,8 +14,13 @@ const js=await transform(source,{minify:true,format:'iife',target:'es2022',legal
 const css=await transform(inlineCss+'\n'+await fs.readFile('admin.css','utf8')+'\n'+await fs.readFile('software.css','utf8')+'\n'+await fs.readFile('dashboard.css','utf8')+'\n'+await fs.readFile('personnel-profile.css','utf8'),{loader:'css',minify:true,target:'es2022',legalComments:'none'});
 const hash=value=>createHash('sha256').update(value).digest('hex').slice(0,12);
 const jsFile='app.'+hash(js.code)+'.js',cssFile='app.'+hash(css.code)+'.css';
+const integrity=value=>'sha384-'+createHash('sha384').update(value).digest('base64');
+const jsIntegrity=integrity(js.code),cssIntegrity=integrity(css.code);
 html=html.replace(/<style>[\s\S]*?<\/style>/g,'').replace(/<link rel="stylesheet" href="(?:admin|software|dashboard|personnel-profile)\.css[^\"]*">/g,'').replace(/<script src="[^\"]+" defer><\/script>/g,'');
-html=html.replace('</head>','<link rel="stylesheet" href="assets/'+cssFile+'"></head>').replace('</body>','<script src="assets/'+jsFile+'" defer></script></body>');
+// External script hashes require matching SRI. Do not authorize other same-origin scripts.
+if(!html.includes("script-src 'self';"))throw Error('Expected source CSP was not found');
+html=html.replace("script-src 'self';", "script-src '"+jsIntegrity+"'; script-src-attr 'none';");
+html=html.replace('</head>','<link rel="stylesheet" href="assets/'+cssFile+'" integrity="'+cssIntegrity+'" crossorigin="anonymous"></head>').replace('</body>','<script src="assets/'+jsFile+'" integrity="'+jsIntegrity+'" crossorigin="anonymous" defer></script></body>');
 html=html.replace(/<!--[^]*?-->/g,'').replace(/>\s+</g,'><').trim();
 await fs.mkdir('dist/assets',{recursive:true});
 await Promise.all([fs.writeFile('dist/index.html',html),fs.writeFile('dist/assets/'+jsFile,js.code),fs.writeFile('dist/assets/'+cssFile,css.code),fs.copyFile('manifest.webmanifest','dist/manifest.webmanifest'),fs.copyFile('icon.svg','dist/icon.svg'),fs.writeFile('dist/.nojekyll','')]);

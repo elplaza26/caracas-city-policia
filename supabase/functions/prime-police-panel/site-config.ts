@@ -1,6 +1,6 @@
 export const PANEL_SITE_URL = "https://primepolice.link/";
 export const PANEL_ORIGIN = "https://primepolice.link";
-const allowedOrigins = new Set([PANEL_ORIGIN, "https://primepolicerp.github.io"]);
+const allowedOrigins = new Set([PANEL_ORIGIN]);
 
 export function isPanelOrigin(origin: string): boolean {
   return allowedOrigins.has(origin);
