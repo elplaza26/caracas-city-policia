@@ -194,7 +194,7 @@ async function registerPersonnel(req: Request) {
   try {
     const [guildMember, profiles, configuredRanks] = await Promise.all([
       discord("/guilds/" + GUILD_ID + "/members/" + enc(id)),
-      db("police_personnel?select=discord_user_id,rank_name,rank_role_id,unit,source_application_id,created_at,last_rank_change_at&discord_user_id=eq." + enc(id) + "&limit=1"),
+      db("police_personnel?select=discord_user_id,rank_name,rank_role_id,unit,status,steam_username,source_application_id,created_at,last_rank_change_at&discord_user_id=eq." + enc(id) + "&limit=1"),
       db("police_rank_roles?select=role_id,role_name,rank_order&order=rank_order.asc"),
     ]);
     member = guildMember as any;
@@ -220,7 +220,7 @@ async function registerPersonnel(req: Request) {
     await updatePersonnelNickname(id, nameIc, plate, "PRIME POLICE UCOP: sincronización de nombre IC y placa al asignar rango"); nicknameChanged = true;
     const username = String(member.user?.global_name || member.user?.username || id);
     const now = new Date().toISOString();
-    const rows = await db("police_personnel?on_conflict=discord_user_id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=representation" }, body: JSON.stringify({ discord_user_id: id, discord_username: username, full_name: nameIc, name_ooc: nameOoc, plate, unit, rank_name: String(rank.role_name), rank_role_id: rankRoleId, source_application_id: existing.source_application_id ?? null, status: "active", updated_at: now, last_rank_change_at: existing.rank_role_id === rankRoleId ? (existing.last_rank_change_at || now) : now }) });
+    const rows = await db("police_personnel?on_conflict=discord_user_id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=representation" }, body: JSON.stringify({ discord_user_id: id, discord_username: username, full_name: nameIc, name_ooc: nameOoc, steam_username: String(body.steam_username ?? existing.steam_username ?? "").trim().slice(0,100), plate, unit, rank_name: String(rank.role_name), rank_role_id: rankRoleId, source_application_id: existing.source_application_id ?? null, status: existing.status || "active", updated_at: now, last_rank_change_at: existing.rank_role_id === rankRoleId ? (existing.last_rank_change_at || now) : now }) });
     await postRankAuditLog("🗂️ Ficha policial actualizada",0x6499ff,[{name:"Agente",value:nameIc},{name:"Placa",value:plate},{name:"Rama",value:unit},{name:"Rango",value:String(rank.role_name)},{name:"Gestor",value:auth.userId!}]);
     return json({ ok: true, personnel: rows?.[0] ?? null, message: "Rango y apodo de Discord sincronizados como " + personnelNickname(nameIc, plate) + "." });
   } catch (error) {

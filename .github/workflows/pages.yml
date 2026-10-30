@@ -22,6 +22,7 @@ jobs:
       - name: Check client scripts
         run: |
           node --check app.js
+          node --check personnel-profile.js
           node --check auto-plates.js
           node --check shifts.js
           node --check shifts-actions.js

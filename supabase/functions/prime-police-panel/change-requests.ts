@@ -3,6 +3,7 @@ import { accessMember } from './access-member.ts';
 import { withOperationLock } from './operation-lock.ts';
 import { writeAudit } from './audit-events.ts';
 export const CHANGE_ACTIONS:Record<string,string>={
+ 'personnel-note-add':'Añadir observación a ficha','personnel-note-edit':'Editar observación de ficha','personnel-note-archive':'Archivar observación de ficha',
  'preselection-admit':'Ingresar preseleccionado a Personal','transfer-admit':'Ingresar traslado aceptado a Personal','personnel-register':'Editar o registrar personal','personnel-delete':'Eliminar ficha de personal',
  'rank-change':'Ascenso o descenso','rank-config-save':'Modificar escala de rangos','rank-config-import-all':'Sincronizar escala con Discord',
  'decision':'Resolver postulación','transfer-decision':'Resolver traslado','rank-request-review':'Resolver nuevo ingreso','rank-request-edit':'Corregir datos de nuevo ingreso',
@@ -39,6 +40,17 @@ async function snapshot(action:string,payload:any,c:Context){
  if(action==='personnel-register'&&payload.record_action==='create'&&profile?.length)throw new ChangeInputError('Este ID de Discord ya tiene una ficha. Busca al agente en Personal y pulsa Editar.');
  if(action==='personnel-register'&&payload.record_action==='update'&&!profile?.length)throw new ChangeInputError('La ficha ya no existe. Actualiza Personal antes de registrar al agente.');
  const state:any={profile:profile?.[0]||null};
+ if(action.startsWith('personnel-note-')){
+  if(!profile?.length)throw new ChangeInputError('La ficha del agente ya no existe.');
+  const noteId=String(payload.note_id||''),content=String(payload.content||'').trim();
+  if(!uuid(noteId)||(action!=='personnel-note-archive'&&(!content||content.length>2000)))throw new ChangeInputError('Escribe una observación de entre 1 y 2000 caracteres.');
+  if(action!=='personnel-note-add'){
+   const notes=await c.db('police_personnel_notes?select=*&id=eq.'+encodeURIComponent(noteId)+'&limit=1'),note=notes?.[0];
+   if(!note||note.discord_user_id!==target||note.archived_at||note.version!==payload.expected_version)throw new ChangeInputError('La observación cambió. Actualiza la ficha antes de editarla.');
+   state.note=note;
+  }
+  return{resource:'personnel:'+target,state};
+ }
  if(action==='transfer-admit'){
   if(profile?.length)throw new ChangeInputError('Ya existe una ficha del agente. Revísala desde Personal.');
   const transferId=String(payload.transfer_id||'');if(!uuid(transferId))throw new ChangeInputError('Selecciona un traslado válido.');
@@ -93,7 +105,8 @@ export async function interceptChanges(req:Request,action:string,c:Context):Prom
     if(decision==='reject'){await writeAudit('❌ Cambio rechazado por Directiva',[{name:'Cambio',value:CHANGE_ACTIONS[proposal.action]},{name:'Gestor',value:actorName},{name:'Motivo',value:reason||'Sin observaciones'}]);return c.json({ok:true,message:'Cambio rechazado. No se aplicó la propuesta.'});}
     const current=await snapshot(proposal.action,proposal.payload,c);if(current.resource!==proposal.resource_key||await fingerprint(current.state)!==proposal.fingerprint)throw Error('El registro cambió desde que se envió esta propuesta. Solicita una nueva para evitar sobrescribir cambios recientes.');
     const url=new URL(req.url);url.search='';url.searchParams.set('panel',proposal.action);
-    const result=await c.dispatch(new Request(url,{method:'POST',headers:{authorization:req.headers.get('authorization')||'','content-type':'application/json'},body:JSON.stringify(proposal.payload)}));
+    const approvedPayload=proposal.action.startsWith('personnel-note-')?{...proposal.payload,_approved_change_id:proposal.id}:proposal.payload;
+    const result=await c.dispatch(new Request(url,{method:'POST',headers:{authorization:req.headers.get('authorization')||'','content-type':'application/json'},body:JSON.stringify(approvedPayload)}));
     const outcome=await result.json();if(!result.ok||outcome.pending_authorization||outcome.pending_approval)throw Error(outcome.error||'No se pudo aplicar el cambio.');
     applied=true;
     await c.db('police_change_requests?id=eq.'+encodeURIComponent(proposalId)+'&status=eq.processing',{method:'PATCH',body:JSON.stringify({status:'approved',result_message:[outcome.message||'Cambio aplicado',outcome.warning].filter(Boolean).join(' ').slice(0,1000)})});
