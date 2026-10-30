@@ -1,3 +1,4 @@
+import { parseApplicationIdentity } from "../_shared/application-identity.ts";
 import { manageAbsences } from "./absences.ts";
 import { listPagedRecords } from "./paged-records.ts";
 import { createPanelSession, authenticatePanelSession, sessionRoutes, rateLimitRequest } from "./panel-sessions.ts";
@@ -391,6 +392,7 @@ async function decide(req: Request) {
     );
     app = rows?.[0];
     if (!app) return json({ error: "No se encontró esa candidatura." }, 404);
+    app = {...app, full_name: parseApplicationIdentity(app.full_name, app.answers || {}).name};
 
     const retryRole = action === "accept" && app.status === "accepted" && !app.role_assigned_at;
     isNewDecision = app.status === "pending";

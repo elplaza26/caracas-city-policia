@@ -40,6 +40,7 @@ jobs:
       - name: Build public assets only
         run: |
           npm ci --ignore-scripts
+          node scripts/check-application-identity.mjs
           npm run build
           node scripts/check-public-build.mjs
       - name: Upload site

@@ -1,3 +1,4 @@
+import { parseApplicationIdentity } from "../_shared/application-identity.ts";
 import { handleAbsenceInteraction, absencePanel, ABSENCE_CHANNEL_ID } from "./absences.ts";
 const GUILD_ID = "1539970134469378068";
 const PRESELECTION_ROLE_ID = "1564685481457877012";
@@ -42,9 +43,8 @@ async function publishOrUpdatePanel(channelId:string,customId:string,payload:any
  return await discord("/channels/"+channelId+"/messages",{method:"POST",body:JSON.stringify(payload)});
 }
 async function processApplicationSubmit(i:any,userId:string,username:string,a:any){
- const personal=a.character_info||"";const characterName=(personal.split(/\r?\n|\|/)[0].replace(/^Nombre IC:\s*/i,"").trim()||personal).slice(0,100);
- const ageIc=personal.match(/edad\s*IC\s*:\s*(\d{1,3})/i);const ageOoc=personal.match(/edad\s*OOC\s*:\s*(\d{1,3})/i);
- const answer={character_info:personal,age_ic:ageIc?Number(ageIc[1]):null,age_ooc:ageOoc?Number(ageOoc[1]):null,motivation:a.motivation,detention_rights:a.detention_rights,scene_resolution:a.scene_resolution,roleplay_response:a.roleplay_response};
+ const personal=a.character_info||"";const identity=parseApplicationIdentity(personal,{character_info:personal});const characterName=identity.name.slice(0,100);
+ const answer={character_info:personal,age_ic:identity.ageIc,age_ooc:identity.ageOoc,motivation:a.motivation,detention_rights:a.detention_rights,scene_resolution:a.scene_resolution,roleplay_response:a.roleplay_response};
  const submitted=await db("rpc/submit_police_application",{method:"POST",body:JSON.stringify({p_discord_user_id:userId,p_discord_username:username,p_full_name:characterName,p_previous_experience:a.motivation,p_motivation:a.motivation,p_answers:answer})});
  if(!submitted?.ok){
   let message=String(submitted?.message||"No se pudo aceptar la postulación.");
@@ -204,7 +204,7 @@ async function handle(i:any){
 }
 Deno.serve(async(req:Request)=>{
  if(req.method==="OPTIONS")return new Response(null,{status:204,headers:CORS});
- if(req.method==="GET")return json({ok:true,service:"PRIME POLICE Discord applications",release:"application-cooldowns-2026-10-30a",duty_service:true,configured:{discord:Boolean(BOT_TOKEN),database:Boolean(SUPABASE_URL&&SERVICE_KEY),public_key:Boolean(DISCORD_PUBLIC_KEY)},application_id:APPLICATION_ID,guild_id:GUILD_ID,commands:["publicar_postulaciones","postulacion","traslado"],message:DISCORD_PUBLIC_KEY?"Endpoint disponible.":"Falta configurar DISCORD_PUBLIC_KEY en los secretos de Supabase."});
+ if(req.method==="GET")return json({ok:true,service:"PRIME POLICE Discord applications",release:"application-identity-2026-10-30b",duty_service:true,configured:{discord:Boolean(BOT_TOKEN),database:Boolean(SUPABASE_URL&&SERVICE_KEY),public_key:Boolean(DISCORD_PUBLIC_KEY)},application_id:APPLICATION_ID,guild_id:GUILD_ID,commands:["publicar_postulaciones","postulacion","traslado"],message:DISCORD_PUBLIC_KEY?"Endpoint disponible.":"Falta configurar DISCORD_PUBLIC_KEY en los secretos de Supabase."});
  if(req.method!=="POST")return json({error:"Method not allowed"},405);
  const body=await req.text();if(!await validSignature(req,body))return json({error:"Invalid Discord signature or DISCORD_PUBLIC_KEY not configured"},401);
  let i:any;try{i=JSON.parse(body)}catch{return json({error:"Invalid JSON"},400)}
