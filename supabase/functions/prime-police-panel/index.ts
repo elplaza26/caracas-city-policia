@@ -516,7 +516,7 @@ async function decide(req: Request) {
         ? "Gracias por tu tiempo y por querer formar parte de PRIME POLICE. En esta ocasión no has sido seleccionado. No te desanimes: puedes prepararte y volver a intentarlo. Te quedan **" + remaining + " de 3 intentos**."
         : "Gracias por tu esfuerzo y por postularte a PRIME POLICE. En esta ocasión no has sido seleccionado. Has utilizado tus **3 de 3 intentos**, así que no podrás enviar otra postulación. Te animamos a seguir participando en la comunidad y te deseamos lo mejor.";
     if (!accepted && remaining > 0) {
-      const waitHours = attempt === 1 ? 24 : 48;
+      const waitHours = attempt === 1 ? 12 : 48;
       const reviewedAt = Date.parse(String(finalApp.reviewed_at || ""));
       const retryAt = Math.ceil(((Number.isFinite(reviewedAt) ? reviewedAt : Date.now()) + waitHours * 3600000) / 1000);
       description += "\n\nDebes esperar **" + waitHours + " horas** desde este rechazo. Podrás volver a postularte <t:" + retryAt + ":F> (<t:" + retryAt + ":R>).";

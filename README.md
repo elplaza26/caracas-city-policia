@@ -88,7 +88,7 @@ Cada solicitud de Nuevo ingreso permite «Editar datos»: nombre IC, placa, usua
 
 ### Espera tras rechazar una postulación
 
-La RPC privada `submit_police_application` mantiene el máximo de tres intentos y aplica una espera de 24 horas tras el primer rechazo y 48 horas tras el segundo, contadas desde `reviewed_at`. Los envíos durante la espera no consumen intentos. El bot muestra la fecha de desbloqueo en la zona horaria del usuario y el mensaje privado de rechazo informa de la espera. Las solicitudes históricas sin fecha de revisión usan su fecha de creación.
+La RPC privada `submit_police_application` mantiene el máximo de tres intentos y aplica una espera de 12 horas tras el primer rechazo y 48 horas tras el segundo, contadas desde `reviewed_at`. Los envíos durante la espera no consumen intentos. El bot muestra la fecha de desbloqueo en la zona horaria del usuario y el mensaje privado de rechazo informa de la espera. Las solicitudes históricas sin fecha de revisión usan su fecha de creación.
 
 ### Listado público de aceptados
 
