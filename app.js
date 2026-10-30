@@ -123,6 +123,15 @@ function niceDate(value) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString("es-ES", {dateStyle:"medium",timeStyle:"short"});
 }
+function decisionCredit(item) {
+  if (item.status === 'pending') return '';
+  const rawName = String(item.reviewed_by_name || '').trim();
+  const name = rawName && rawName !== 'Panel web' ? rawName : '';
+  const id = String(item.reviewed_by_discord_id || '').trim();
+  const who = [name, id && id !== name ? 'Discord ID ' + id : ''].filter(Boolean).join(' · ') || 'Responsable no registrado';
+  const label = item.status === 'accepted' ? 'Aprobada por ' : item.status === 'rejected' ? 'Rechazada por ' : 'Revisada por ';
+  return label + who + (item.reviewed_at ? ' · ' + niceDate(item.reviewed_at) : '');
+}
 
 async function loadRankAuthorizations(){
  const box=$("rankAuthorizations");box.textContent="Cargando solicitudes de autorización…";
@@ -236,7 +245,7 @@ function renderApplications() {
     spacer.className = "spacer";
     const updated = document.createElement("span");
     updated.className = "muted";
-    updated.textContent = app.reviewed_by_name ? "Revisado por " + app.reviewed_by_name : "";
+    updated.textContent = decisionCredit(app);
     actions.append(spacer, updated);
     card.append(head, grid, actions);
     list.append(card);
@@ -288,7 +297,7 @@ function renderTransfers() {
       if(item.admitted_at){const entered=document.createElement('span');entered.className='badge accepted';entered.textContent='Ingresado en Personal · '+niceDate(item.admitted_at);actions.append(entered);}
       else{const enter=document.createElement('button');enter.type='button';enter.className='btn primary';enter.textContent='Ingresar a la base';enter.addEventListener('click',()=>openPreselectionAdmission(item,'transfer'));actions.append(enter);}
     }
-    const spacer=document.createElement("span");spacer.className="spacer";const reviewer=document.createElement("span");reviewer.className="muted";reviewer.textContent=item.reviewed_by_name?"Revisado por "+item.reviewed_by_name:"";actions.append(spacer,reviewer);card.append(head,grid,actions);list.append(card);
+    const spacer=document.createElement("span");spacer.className="spacer";const reviewer=document.createElement("span");reviewer.className="muted";reviewer.textContent=decisionCredit(item);actions.append(spacer,reviewer);card.append(head,grid,actions);list.append(card);
   });
 }
 async function loadTransfers(){

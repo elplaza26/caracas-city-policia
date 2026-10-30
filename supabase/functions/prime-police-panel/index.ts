@@ -282,7 +282,7 @@ async function listApplications(req: Request) {
   if (!userId) return json({ error: "Sesión caducada o sin permisos de gestión." }, 403);
   try {
     const applications = await db(
-      "police_applications?select=id,discord_user_id,discord_username,full_name,age,previous_experience,motivation,availability,status,decision_reason,reviewed_by_name,created_at,reviewed_at,role_assigned_at,discord_message_id,attempt_number,answers&order=created_at.desc&limit=100",
+      "police_applications?select=id,discord_user_id,discord_username,full_name,age,previous_experience,motivation,availability,status,decision_reason,reviewed_by_discord_id,reviewed_by_name,created_at,reviewed_at,role_assigned_at,discord_message_id,attempt_number,answers&order=created_at.desc&limit=100",
     );
     return json({ ok: true, applications: applications ?? [] });
   } catch (e) {
@@ -430,6 +430,11 @@ async function decide(req: Request) {
       }
     }
 
+    let reviewerName = reviewerId;
+    try {
+      const reviewer = await discord("/guilds/" + GUILD_ID + "/members/" + encodeURIComponent(reviewerId)) as any;
+      reviewerName = String(reviewer.nick || reviewer.user?.global_name || reviewer.user?.username || reviewerId);
+    } catch (e) { console.error("Could not resolve application reviewer name:", String(e)); }
     const now = new Date().toISOString();
     let patch: Record<string, unknown>;
     let filter: string;
@@ -438,7 +443,7 @@ async function decide(req: Request) {
         ...(app.status === "pending" ? {
           status: "accepted",
           reviewed_by_discord_id: reviewerId,
-          reviewed_by_name: "Panel web",
+          reviewed_by_name: reviewerName,
           reviewed_at: now,
         } : {}),
         role_assigned_at: now,
@@ -451,7 +456,7 @@ async function decide(req: Request) {
       patch = {
         status: "rejected",
         reviewed_by_discord_id: reviewerId,
-        reviewed_by_name: "Panel web",
+        reviewed_by_name: reviewerName,
         reviewed_at: now,
         decision_reason: reason,
       };
@@ -473,11 +478,6 @@ async function decide(req: Request) {
         await db("police_preselections?on_conflict=discord_user_id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify({ discord_user_id: String(app.discord_user_id), discord_username: String(app.discord_username ?? ""), full_name: String(app.full_name ?? ""), source_application_id: app.id, status: "active", accepted_at: finalApp.reviewed_at ?? new Date().toISOString(), updated_at: new Date().toISOString() }) });
       } catch (e) { preselectionSynced = false; console.error("Preselection record creation failed:", String(e)); }
     }
-    let reviewerName = reviewerId;
-    try {
-      const reviewer = await discord("/guilds/" + GUILD_ID + "/members/" + encodeURIComponent(reviewerId)) as any;
-      reviewerName = String(reviewer.nick || reviewer.user?.global_name || reviewer.user?.username || reviewerId);
-    } catch (e) { console.error("Could not resolve application reviewer name:", String(e)); }
     await postAuditLog(
       action === 'accept' ? '🛡️ PRIME POLICE · Preselección aprobada' : '❌ Postulación rechazada',
       action === 'accept' ? 0x4d98c9 : 0xe87979,
