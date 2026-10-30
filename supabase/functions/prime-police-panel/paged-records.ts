@@ -24,7 +24,8 @@ export async function listPagedRecords(req:Request,json:(v:unknown,status?:numbe
  const target=p.get('discord_user_id');if(target){if(!/^\d{17,20}$/.test(target))return json({error:'Usuario inválido.'},400);filter+='&discord_user_id=eq.'+target;}
  const rank=p.get('rank');if(rank&&kind==='personnel')filter+='&rank_name=eq.'+encodeURIComponent(rank.slice(0,100));
  const projection=kind==='personnel'&&p.get('directory')==='true'?'discord_user_id,discord_username,full_name,name_ooc,plate,rank_name,rank_role_id,unit,status,last_rank_change_at,updated_at':'*';
- const result=await query(config.table+'?select='+projection+'&order='+config.date+'.desc,'+(kind==='personnel'||kind==='preselections'?'discord_user_id':'id')+'.desc&limit='+limit+'&offset='+offset+filter);
+ const ordering=kind==='personnel'?'plate_number.asc.nullslast,plate.asc,discord_user_id.asc':config.date+'.desc,'+(kind==='preselections'?'discord_user_id':'id')+'.desc';
+ const result=await query(config.table+'?select='+projection+'&order='+ordering+'&limit='+limit+'&offset='+offset+filter);
  const counts:Record<string,number>={};
  if(p.get('counts')==='true')await Promise.all(config.statuses.map(async s=>{counts[s]=(await query(config.table+'?select='+config.date+'&status=eq.'+s+'&limit=1')).count;}));
  return json({ok:true,records:result.rows,total:result.count,counts,next_offset:offset+result.rows.length<result.count?offset+limit:null});

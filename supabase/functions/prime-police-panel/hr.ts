@@ -147,7 +147,7 @@ async function allowed(req: Request) {
 }async function listPersonnel(req: Request) {
   const auth = await allowed(req); if (auth.error) return auth.error;
   try {
-    const records = await db("police_personnel?select=discord_user_id,discord_username,full_name,name_ooc,steam_username,plate,unit,rank_name,rank_role_id,status,source_application_id,created_at,updated_at,last_rank_change_at&unit=in.(POLICIA,UCOP,CIC)&order=full_name.asc&limit=500");
+    const records = await db("police_personnel?select=discord_user_id,discord_username,full_name,name_ooc,steam_username,plate,unit,rank_name,rank_role_id,status,source_application_id,created_at,updated_at,last_rank_change_at&unit=in.(POLICIA,UCOP,CIC)&order=plate_number.asc.nullslast,plate.asc,discord_user_id.asc&limit=500");
     return json({ ok: true, personnel: records ?? [] });
   } catch (error) { console.error("Personnel list error:", String(error)); return json({ error: "No se pudo cargar la base de personal." }, 500); }
 }
@@ -658,6 +658,7 @@ async function changeRank(req: Request) {
 }
 
 export async function handleHr(req: Request, action: string): Promise<Response | null> {
+  if(action==='next-plate'&&req.method==='GET'){const auth=await allowed(req);if(auth.error)return auth.error;return json({ok:true,plate:await db('rpc/next_police_plate',{method:'POST',body:'{}'})});}
   if(action==="rank-request-edit"&&req.method==="POST")return await editRankRequest(req);
   if(action==="audit-events"&&req.method==="GET"){
    const auth=await allowed(req);if(auth.error)return auth.error;
