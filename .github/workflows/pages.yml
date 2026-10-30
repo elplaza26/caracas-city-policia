@@ -43,6 +43,7 @@ jobs:
         run: |
           npm ci --ignore-scripts
           node scripts/check-application-identity.mjs
+          node --experimental-strip-types scripts/check-panel-origins.mjs
           npm run build
           node scripts/check-public-build.mjs
       - name: Upload site

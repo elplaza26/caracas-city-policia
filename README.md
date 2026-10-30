@@ -46,12 +46,14 @@ Supabase proporciona `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` a las Edge Fun
 
 ## Despliegue
 
-- **Panel:** <https://primepolicerp.github.io/PRIME-POLICE/>
+- **Panel:** <https://primepolice.link/>
 - **Proyecto Supabase:** `ngkmylqsdeevdtrjrgfn`
 - **Interacciones del bot:** `https://ngkmylqsdeevdtrjrgfn.supabase.co/functions/v1/prime-police-discord`
 - **Retorno OAuth de Discord:** `https://ngkmylqsdeevdtrjrgfn.supabase.co/functions/v1/prime-police-panel?panel=oauth-callback`
 
 GitHub Pages publica la rama `main` con `.github/workflows/pages.yml`. El backend está formado por `prime-police-panel` (panel y RR. HH.) y `prime-police-discord` (comandos e interacciones). Las tablas y cambios de esquema están versionados en `supabase/migrations/`; antes de desplegar una instalación nueva, aplica todas las migraciones en orden en el proyecto Supabase.
+
+El dominio personalizado `primepolice.link` se configura en Pages, con ALIAS de la raíz y CNAME de `www` hacia `primepolicerp.github.io`, y HTTPS obligatorio. Al publicar mediante Actions no hace falta un archivo CNAME. El retorno OAuth en Discord sigue siendo la función de Supabase; esa función vuelve al dominio nuevo después de validar el acceso. `site-config.ts` limita los orígenes al dominio HTTPS y al anterior de Pages durante la transición; la respuesta HTTP aplica esa lista también a los errores de los módulos internos.
 
 Los rangos se configuran dentro del panel: abre **Ascensos y descensos**, añade los roles de rango del servidor en el orden jerárquico y guarda la escala. No importes todos los roles sin revisar cuáles pertenecen realmente a la escala policial.
 

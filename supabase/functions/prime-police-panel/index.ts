@@ -1,4 +1,5 @@
 import { parseApplicationIdentity } from "../_shared/application-identity.ts";
+import { PANEL_SITE_URL, PANEL_ORIGIN, isPanelOrigin, panelResponseHeaders } from "./site-config.ts";
 import { scheduleAcceptedPublicList } from "./public-accepted.ts";
 import { preparePlate } from "./plates.ts";
 import { managePersonnelProfile } from "./personnel-profile.ts";
@@ -24,8 +25,6 @@ const DISCORD_OAUTH_CLIENT_SECRET = Deno.env.get("DISCORD_OAUTH_CLIENT_SECRET") 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const DISCORD_OAUTH_CALLBACK = SUPABASE_URL.replace(/\/$/, "") + "/functions/v1/prime-police-panel?panel=oauth-callback";
-const PANEL_SITE_URL = "https://primepolicerp.github.io/PRIME-POLICE/";
-const PANEL_ORIGIN = "https://primepolicerp.github.io";
 const PANEL_SESSION_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 const CORS_HEADERS = {
@@ -547,7 +546,7 @@ async function routePanel(req: Request): Promise<Response> {
  try {
   const action = new URL(req.url).searchParams.get("panel");
   const origin = req.headers.get("origin");
-  if (action !== "oauth-callback" && origin && origin !== PANEL_ORIGIN) return json({ error: "Origen no autorizado." }, 403);
+  if (action !== "oauth-callback" && origin && !isPanelOrigin(origin)) return json({ error: "Origen no autorizado." }, 403);
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS_HEADERS });
   if (action === "oauth-start" && req.method === "GET") return startDiscordOAuth();
   if (action === "oauth-callback" && req.method === "GET") return await finishDiscordOAuth(req);
@@ -601,7 +600,7 @@ async function dispatchWithLocks(req:Request):Promise<Response>{
 
 async function dispatchHttp(req:Request):Promise<Response>{try{
  const action=new URL(req.url).searchParams.get('panel')||'',origin=req.headers.get('origin');
- if(action!=='oauth-callback'&&origin&&origin!==PANEL_ORIGIN)return json({error:'Origen no autorizado.'},403);
+ if(action!=='oauth-callback'&&origin&&!isPanelOrigin(origin))return json({error:'Origen no autorizado.'},403);
  if(req.method==='OPTIONS')return routePanel(req);
  if(!await rateLimitRequest(req,action))return json({error:'Demasiadas peticiones. Espera un minuto antes de volver a intentarlo.'},429);
  const sessionResponse=await sessionRoutes(req,action,json);if(sessionResponse)return sessionResponse;
@@ -612,7 +611,7 @@ async function dispatchHttp(req:Request):Promise<Response>{try{
  if(assignedPlate&&result.ok){const body=await result.json();return new Response(JSON.stringify({...body,assigned_plate:assignedPlate}),{status:result.status,headers:result.headers});}
  return result;
  }catch(error){console.error('Request dispatch:',String(error));const upstream=discordFailure(error);return upstream?json(upstream.body,upstream.status):json({error:'No se pudo procesar la petición. Comprueba la conexión y actualiza el registro.'},503);}}
-Deno.serve(async(req:Request)=>{const started=performance.now(),requestId=crypto.randomUUID();const response=await dispatchHttp(req);const headers=new Headers(response.headers);headers.set('X-Request-ID',requestId);headers.set('Access-Control-Expose-Headers','X-Request-ID');console.info('panel_request',JSON.stringify({request_id:requestId,action:new URL(req.url).searchParams.get('panel')||'health',method:req.method,status:response.status,elapsed_ms:Math.round(performance.now()-started)}));return new Response(response.body,{status:response.status,headers});});
+Deno.serve(async(req:Request)=>{const started=performance.now(),requestId=crypto.randomUUID();const response=await dispatchHttp(req);const headers=panelResponseHeaders(response.headers,req.headers.get('origin'));headers.set('X-Request-ID',requestId);headers.set('Access-Control-Expose-Headers','X-Request-ID');console.info('panel_request',JSON.stringify({request_id:requestId,action:new URL(req.url).searchParams.get('panel')||'health',method:req.method,status:response.status,elapsed_ms:Math.round(performance.now()-started)}));return new Response(response.body,{status:response.status,headers});});
 const WARN_ROLE_IDS = ["1539970134482092032", "1539970134469378077", "1539970134469378076"];
 const STRIKE_ROLE_IDS = ["1539970134469378075", "1539970134469378074", "1539970134469378073"];
 const EXPELLED_ROLE_ID = "1539970134482092034";
