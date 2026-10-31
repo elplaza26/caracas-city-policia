@@ -3,7 +3,7 @@ function applicationReviewPanel(app){
  const title=document.createElement('summary');title.textContent='Revisión interna · IA y coincidencias';title.style.cursor='pointer';
  const body=document.createElement('div');body.style.paddingTop='12px';box.append(title,body);let loaded=false,loading=false;
  const load=async()=>{if(loaded||loading)return;loading=true;body.textContent='Revisando respuestas…';try{
-  const result=await request('application-review',{query:{id:app.id}});body.replaceChildren();
+  const result=await request('application-review',{method:'GET',query:{id:app.id}});body.replaceChildren();
   const notice=document.createElement('p');notice.className='muted';notice.textContent=result.notice;body.append(notice);
   if(!result.flags.length){const empty=document.createElement('p');empty.textContent='Sin referencias explícitas ni coincidencias detectadas. Esto no acredita autoría humana.';body.append(empty);}
   for(const flag of result.flags){const row=document.createElement('div');row.className='detail';row.style.marginBottom='8px';const strong=document.createElement('strong');strong.textContent=flag.question+' · '+flag.title;const text=document.createElement('p');text.className='muted';text.textContent=flag.detail;row.append(strong,text);body.append(row);}
