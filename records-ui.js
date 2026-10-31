@@ -1,6 +1,6 @@
 const recordPages={};let directoryExpires=0,directoryTask=null;
 const recordConfig={
- applications:{container:'candidateList',search:'search',status:()=>activeStatus,render:()=>renderApplications(),assign:rows=>{applications=rows;},stats:['countPending','countAccepted','countRejected']},
+ applications:{container:'candidateList',search:'search',status:()=>activeStatus==='rejected-ai'?'rejected':activeStatus,render:()=>renderApplications(),assign:rows=>{applications=rows;},stats:['countPending','countAccepted','countRejected']},
  transfers:{container:'transferList',search:'transferSearch',status:()=>activeTransferStatus,render:()=>renderTransfers(),assign:rows=>{transfers=rows;},stats:['transferPendingCount','transferAcceptedCount','transferRejectedCount']},
  intakes:{container:'rankRequestList',search:'rankRequestSearch',status:()=>activeRankRequestStatus,render:()=>renderRankRequests(),assign:rows=>{rankRequests=rows;},stats:['rankRequestPendingCount','rankRequestAcceptedCount','rankRequestRejectedCount']},
  personnel:{container:'personnelRows',search:'personnelSearch',status:()=>$('personnelStatusFilter').value,render:()=>renderPersonnel(),assign:rows=>{rosterPage=rows;}},
@@ -22,7 +22,7 @@ async function loadRecordPage(kind){
  $(config.container).setAttribute('aria-busy','true');
  try{
   if(kind==='personnel')await loadPersonnelDirectory();
-  const result=await request('records',{method:'GET',query:{kind,offset:state.offset,limit:25,status:config.status(),search:$(config.search)?.value||'',counts:kind==='personnel'||kind==='sanctions'||config.stats?'true':'false',...(kind==='personnel'?{rank:$('personnelRankFilter').value}:{})}});
+  const result=await request('records',{method:'GET',query:{kind,offset:state.offset,limit:25,status:config.status(),search:$(config.search)?.value||'',counts:kind==='personnel'||kind==='sanctions'||config.stats?'true':'false',...(kind==='applications'&&activeStatus==='rejected-ai'?{review:'ai'}:{}),...(kind==='personnel'?{rank:$('personnelRankFilter').value}:{})}});
   if(sequence!==state.sequence||token!==session)return;
   config.assign(result.records||[]);const searchInput=$(config.search),searchValue=searchInput?.value;if(searchInput)searchInput.value='';try{config.render();}finally{if(searchInput)searchInput.value=searchValue;}
   if(config.stats)config.stats.forEach((id,i)=>{$(id).textContent=result.counts[['pending','accepted','rejected'][i]]||0;});

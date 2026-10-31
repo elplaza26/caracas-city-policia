@@ -183,10 +183,10 @@ function renderApplications() {
   const list = $("candidateList");
   list.replaceChildren();
   const q = $("search").value.trim().toLocaleLowerCase("es");
-  const visible = applications.filter(app => app.status === activeStatus && [
+  const visible = applications.filter(app => app.status === (activeStatus==='rejected-ai'?'rejected':activeStatus) && [
     app.full_name, app.discord_username, app.discord_user_id, JSON.stringify(app.answers || {})
   ].join(" ").toLocaleLowerCase("es").includes(q));
-  $("listTitle").textContent = activeStatus === "pending" ? "Postulaciones pendientes" : activeStatus === "accepted" ? "Postulaciones aceptadas" : "Postulaciones rechazadas";
+  $("listTitle").textContent = activeStatus==='rejected-ai'?'Rechazadas con marca de IA · pendientes de volver a revisar':activeStatus === "pending" ? "Postulaciones pendientes" : activeStatus === "accepted" ? "Postulaciones aceptadas" : "Postulaciones rechazadas";
   document.querySelectorAll(".tab").forEach(b => b.classList.toggle("active", b.dataset.status === activeStatus));
   $("countPending").textContent = applications.filter(a => a.status === "pending").length;
   $("countAccepted").textContent = applications.filter(a => a.status === "accepted").length;
@@ -194,7 +194,7 @@ function renderApplications() {
   if (!visible.length) {
     const empty = document.createElement("div");
     empty.className = "empty";
-    empty.textContent = applications.some(a => a.status === activeStatus) ? "No hay resultados para esta búsqueda." : activeStatus === "pending" ? "No hay postulaciones pendientes." : activeStatus === "accepted" ? "Todavía no hay postulaciones aceptadas." : "Todavía no hay postulaciones rechazadas.";
+    empty.textContent = activeStatus==='rejected-ai'?'No hay postulaciones rechazadas con una marca manual de IA. Puedes guardar la marca en Revisión interna.':applications.some(a => a.status === activeStatus) ? "No hay resultados para esta búsqueda." : activeStatus === "pending" ? "No hay postulaciones pendientes." : activeStatus === "accepted" ? "Todavía no hay postulaciones aceptadas." : "Todavía no hay postulaciones rechazadas.";
     list.append(empty);
     return;
   }
@@ -228,6 +228,7 @@ function renderApplications() {
       detail(isRoleplayForm ? "Situaciones policiales" : "Acepta las normativas de PRIME POLICE", a.roleplay_response || a.availability_rules || a.rules_accepted),
       detail("Motivo de decisión", app.decision_reason)
     );
+    if(app.ai_review_verdict){grid.append(detail('Marca para volver a revisar',app.ai_review_verdict==='declared_ai'?'IA declarada por el postulante':'Posible uso de IA'),detail('Observación de la revisión',app.ai_review_note),detail('Marcada por',String(app.ai_reviewed_by_name||app.ai_reviewed_by_discord_id||'No registrado')+' · '+niceDate(app.ai_reviewed_at)));}
     const actions = document.createElement("div");
     actions.className = "candidate-actions";
     const pending = app.status === "pending";

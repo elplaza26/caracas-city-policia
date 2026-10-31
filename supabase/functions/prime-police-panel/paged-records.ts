@@ -17,6 +17,7 @@ export async function listPagedRecords(req:Request,json:(v:unknown,status?:numbe
  if(req.method!=='GET')return json({error:'Método no permitido.'},405);
  const p=new URL(req.url).searchParams,kind=p.get('kind')||'',config=kinds[kind];if(!config)return json({error:'Lista inválida.'},400);
  const offset=Number(p.get('offset')||0),limit=Number(p.get('limit')||25);
+ const review=p.get('review')||'';if(review&&(kind!=='applications'||review!=='ai'))return json({error:'Filtro de revisión inválido.'},400);
  if(!Number.isSafeInteger(offset)||offset<0||!Number.isSafeInteger(limit)||limit<1||limit>100)return json({error:'Página inválida.'},400);
  let filter='';const status=p.get('status')||'';if(status){if(!config.statuses.includes(status))return json({error:'Estado inválido.'},400);filter+='&status=eq.'+status;}
  const search=(p.get('search')||'').replace(/[^\p{L}\p{N}\s]/gu,'').trim().slice(0,100);
@@ -25,7 +26,8 @@ export async function listPagedRecords(req:Request,json:(v:unknown,status?:numbe
  const rank=p.get('rank');if(rank&&kind==='personnel')filter+='&rank_name=eq.'+encodeURIComponent(rank.slice(0,100));
  const projection=kind==='personnel'&&p.get('directory')==='true'?'discord_user_id,discord_username,full_name,name_ooc,plate,rank_name,rank_role_id,unit,status,last_rank_change_at,updated_at':'*';
  const ordering=kind==='personnel'?'plate_number.asc.nullslast,plate.asc,discord_user_id.asc':config.date+'.desc,'+(kind==='preselections'?'discord_user_id':'id')+'.desc';
- const result=await query(config.table+'?select='+projection+'&order='+ordering+'&limit='+limit+'&offset='+offset+filter);
+ const table=review==='ai'?'police_rejected_ai_applications':config.table;
+ const result=await query(table+'?select='+projection+'&order='+ordering+'&limit='+limit+'&offset='+offset+filter);
  const counts:Record<string,number>={};
  if(p.get('counts')==='true')await Promise.all(config.statuses.map(async s=>{counts[s]=(await query(config.table+'?select='+config.date+'&status=eq.'+s+'&limit=1')).count;}));
  return json({ok:true,records:result.rows,total:result.count,counts,next_offset:offset+result.rows.length<result.count?offset+limit:null});
