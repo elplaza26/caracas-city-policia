@@ -1,4 +1,5 @@
 import { parseApplicationIdentity } from "../_shared/application-identity.ts";
+import { identityModal, handleApplicationSteps } from "./application-steps.ts";
 import { handleAbsenceInteraction, absencePanel, ABSENCE_CHANNEL_ID } from "./absences.ts";
 const GUILD_ID = "1539970134469378068";
 const PRESELECTION_ROLE_ID = "1564685481457877012";
@@ -43,7 +44,7 @@ async function publishOrUpdatePanel(channelId:string,customId:string,payload:any
  return await discord("/channels/"+channelId+"/messages",{method:"POST",body:JSON.stringify(payload)});
 }
 async function processApplicationSubmit(i:any,userId:string,username:string,a:any){
- const personal=a.character_info||"";const identity=parseApplicationIdentity(personal,{character_info:personal});const characterName=identity.name.slice(0,100);
+ const personal=a.character_info||a.character_name||"";const identity=parseApplicationIdentity(personal,{character_info:personal,age_ic:a.age_ic,age_ooc:a.age_ooc});const characterName=identity.name.slice(0,100);
  const answer={character_info:personal,age_ic:identity.ageIc,age_ooc:identity.ageOoc,motivation:a.motivation,detention_rights:a.detention_rights,scene_resolution:a.scene_resolution,roleplay_response:a.roleplay_response};
  const submitted=await db("rpc/submit_police_application",{method:"POST",body:JSON.stringify({p_discord_user_id:userId,p_discord_username:username,p_full_name:characterName,p_previous_experience:a.motivation,p_motivation:a.motivation,p_answers:answer})});
  if(!submitted?.ok){
@@ -52,9 +53,10 @@ async function processApplicationSubmit(i:any,userId:string,username:string,a:an
    const retryAt=Math.ceil(Date.parse(submitted.retry_at)/1000);
    if(Number.isFinite(retryAt))message+="\nPodrás volver a enviarla <t:"+retryAt+":F> (<t:"+retryAt+":R>). Este envío no consume un intento.";
   }
-  await editInteractionReply(i,message);return;
+  await editInteractionReply(i,message);return submitted;
  }
  await editInteractionReply(i,"📋 **RRHH UCOP · Escrito recibido en privado**\nTu postulación quedó registrada de forma privada. Este es tu intento "+submitted.attempt_number+" de 3. UCOP revisará tus respuestas y te enviará el resultado por privado.");
+ return submitted;
 }
 async function processTransferSubmit(i:any,userId:string,username:string,a:any){
  const fullName=String(a.full_name||"").trim().slice(0,100);
@@ -114,13 +116,7 @@ function rankRequestModal(){return response(9,{custom_id:"prime_rank_request_sub
  {type:18,label:"Número de placa",component:modalInput("plate","Número de placa policial.",true,1,30)},
  {type:18,label:"Aprobado por (sin @)",description:"Indica el nombre de quien aprobó tu entrevista IC.",component:modalInput("approved_by","Escribe el nombre, sin mencionar a nadie.",true,1)}
 ]})}
-function modal(){return response(9,{custom_id:"prime_application_submit",title:"Postulación · PRIME POLICE",components:[
- {type:18,label:"Nombre IC, edad IC y edad OOC",description:"Nombre IC, edad IC y tu edad OOC. Formato: Nombre IC: ... | Edad IC: ... | Edad OOC: ...",component:modalInput("character_info","Nombre IC: ... | Edad IC: ... | Edad OOC: ...")},
- {type:18,label:"Motivación y mejora personal",description:"¿Por qué quieres formar parte de la Policía? ¿Cuáles son tus virtudes y qué aspectos mejorarías?",component:modalInput("motivation","Escribe tu respuesta.")},
- {type:18,label:"Responsabilidad y órdenes",description:"¿Qué significa pertenecer a la Policía? ¿Cómo actuarías ante una orden incorrecta de un superior?",component:modalInput("detention_rights","Escribe tu respuesta.")},
- {type:18,label:"Mala praxis o corrupción",description:"Si un compañero comete una falta grave o acepta un soborno, ¿qué harías y a quién informarías?",component:modalInput("scene_resolution","Escribe tu respuesta.")},
- {type:18,label:"Situaciones policiales",description:"1) Varios vehículos sospechosos: ¿cómo pides apoyo? 2) Persona con bate agresiva: ¿cómo actúas?",component:modalInput("roleplay_response","Escribe tu respuesta.")}
-]})}
+function modal(){return identityModal(modalInput,response);}
 function transferModal(){return response(9,{custom_id:"prime_transfer_submit",title:"Traslado · PRIME POLICE",components:[
  {type:18,label:"Nombre IC",description:"Indica nombre y apellido de tu personaje.",component:modalInput("full_name","Nombre y apellido IC",true,1)},
  {type:18,label:"Edad IC · solo números",description:"Escribe únicamente números (1–120).",component:modalInput("age_ic","Ej. 25",true,1,3)},
@@ -132,6 +128,7 @@ function values(interaction:any){const out:any={};const visit=(node:any)=>{if(!n
 async function handle(i:any){
  if(i.type===1)return response(1,{});
  const user=i.member?.user||i.user;const userId=String(user?.id||"");const username=String(user?.global_name||user?.username||"Usuario Discord");
+ const applicationStep=await handleApplicationSteps(i,userId,username,{db,input:modalInput,response,ephemeral,values,edit:editInteractionResponse,process:processApplicationSubmit});if(applicationStep)return applicationStep;
  const absence=await handleAbsenceInteraction(i,{db,discord,response,ephemeral,values,reply:editInteractionReply});if(absence)return absence;
  if(i.type===2){
   const name=i.data?.name;
@@ -204,7 +201,7 @@ async function handle(i:any){
 }
 Deno.serve(async(req:Request)=>{
  if(req.method==="OPTIONS")return new Response(null,{status:204,headers:CORS});
- if(req.method==="GET")return json({ok:true,service:"PRIME POLICE Discord applications",release:"application-identity-2026-10-30b",duty_service:true,configured:{discord:Boolean(BOT_TOKEN),database:Boolean(SUPABASE_URL&&SERVICE_KEY),public_key:Boolean(DISCORD_PUBLIC_KEY)},application_id:APPLICATION_ID,guild_id:GUILD_ID,commands:["publicar_postulaciones","postulacion","traslado"],message:DISCORD_PUBLIC_KEY?"Endpoint disponible.":"Falta configurar DISCORD_PUBLIC_KEY en los secretos de Supabase."});
+ if(req.method==="GET")return json({ok:true,service:"PRIME POLICE Discord applications",release:"application-two-step-2026-10-31",duty_service:true,configured:{discord:Boolean(BOT_TOKEN),database:Boolean(SUPABASE_URL&&SERVICE_KEY),public_key:Boolean(DISCORD_PUBLIC_KEY)},application_id:APPLICATION_ID,guild_id:GUILD_ID,commands:["publicar_postulaciones","postulacion","traslado"],message:DISCORD_PUBLIC_KEY?"Endpoint disponible.":"Falta configurar DISCORD_PUBLIC_KEY en los secretos de Supabase."});
  if(req.method!=="POST")return json({error:"Method not allowed"},405);
  const body=await req.text();if(!await validSignature(req,body))return json({error:"Invalid Discord signature or DISCORD_PUBLIC_KEY not configured"},401);
  let i:any;try{i=JSON.parse(body)}catch{return json({error:"Invalid JSON"},400)}

@@ -1,5 +1,7 @@
 import { parseApplicationIdentity } from "../_shared/application-identity.ts";
 import { syncRejectionRole, clearRejectionRoles } from "./rejection-roles.ts";
+import { validateDecisionCorrection } from "./decision-correction.ts";
+import { applicationReview } from "./application-review.ts";
 import { PANEL_SITE_URL, PANEL_ORIGIN, isPanelOrigin, panelResponseHeaders } from "./site-config.ts";
 import { scheduleAcceptedPublicList } from "./public-accepted.ts";
 import { preparePlate } from "./plates.ts";
@@ -332,7 +334,9 @@ async function decideTransfer(req: Request) {
     const rows = await db("police_transfer_applications?select=*&id=eq." + encodeURIComponent(id) + "&limit=1");
     const item = rows?.[0];
     if (!item) return json({ error: "No se encontró esa solicitud de traslado." }, 404);
-    if (item.status !== "pending") return json({ error: "Esta solicitud ya fue revisada." }, 409);
+    const correcting=action==='accept'&&item.status==='rejected';
+    if (item.status !== "pending"&&!correcting) return json({ error: "Esta solicitud ya fue revisada." }, 409);
+    const correctionError=await validateDecisionCorrection(body,item,'police_transfer_applications',db);if(correctionError)return json({error:correctionError},409);
     if (action === "accept") {
       try { await discord("/guilds/" + GUILD_ID + "/members/" + encodeURIComponent(item.discord_user_id) + "/roles/" + TRANSFER_ROLE_ID, { method: "PUT", body: JSON.stringify({}) }); }
       catch (e) {
@@ -345,7 +349,7 @@ async function decideTransfer(req: Request) {
     let reviewerName = reviewerId;
     try { const reviewer = await discord("/guilds/" + GUILD_ID + "/members/" + encodeURIComponent(reviewerId)) as any; reviewerName = String(reviewer.nick || reviewer.user?.global_name || reviewer.user?.username || reviewerId); } catch { /* use ID */ }
     const now = new Date().toISOString();
-    const updated = await db("police_transfer_applications?id=eq." + encodeURIComponent(id) + "&status=eq.pending", { method: "PATCH", body: JSON.stringify({ status: action === "accept" ? "accepted" : "rejected", decision_reason: reason, reviewed_by_discord_id: reviewerId, reviewed_by_name: reviewerName, reviewed_at: now, ...(action === "accept" ? { role_assigned_at: now } : {}) }) });
+    const updated = await db("police_transfer_applications?id=eq." + encodeURIComponent(id) + "&status=eq."+item.status, { method: "PATCH", body: JSON.stringify({ status: action === "accept" ? "accepted" : "rejected", decision_reason: reason, reviewed_by_discord_id: reviewerId, reviewed_by_name: reviewerName, reviewed_at: now, ...(action === "accept" ? { role_assigned_at: now } : {}) }) });
     if (!updated?.length) return json({ error: "La solicitud cambió durante la revisión. Actualiza la lista." }, 409);
     const rejectionRoleWarning = action === "reject" ? await syncRejectionRole(GUILD_ID, String(item.discord_user_id), Number(item.attempt_number || 1), discord) : await clearRejectionRoles(GUILD_ID, String(item.discord_user_id), discord);
     if(action==='accept')scheduleAcceptedPublicList();
@@ -355,6 +359,7 @@ async function decideTransfer(req: Request) {
       { name: "Procedencia", value: String(item.source_city) + " · " + String(item.source_faction) },
       { name: "Discord ID", value: String(item.discord_user_id) },
       { name: "Decisión por", value: reviewerName },
+      ...(correcting?[{name:'Corrección de rechazo',value:'Rechazo anterior: '+String(item.reviewed_by_name||item.reviewed_by_discord_id||'No registrado')+' · '+String(item.reviewed_at||'Sin fecha')+' · Motivo: '+String(item.decision_reason||'No indicado')}]:[]),
       ...(action === "reject" ? [{ name: "Intento", value: String(item.attempt_number || 1) + "/3" }, { name: "Rol de rechazo", value: rejectionRoleWarning || ("Rechazado " + String(item.attempt_number || 1) + " sincronizado") }] : []),
       ...(reason ? [{ name: "Motivo", value: reason }] : []),
     ]);
@@ -402,11 +407,13 @@ async function decide(req: Request) {
     app = {...app, full_name: parseApplicationIdentity(app.full_name, app.answers || {}).name};
 
     const retryRole = action === "accept" && app.status === "accepted" && !app.role_assigned_at;
-    isNewDecision = app.status === "pending";
+    const correcting=action==='accept'&&app.status==='rejected';
+    isNewDecision = app.status === "pending"||correcting;
+    const correctionError=await validateDecisionCorrection(body,app,'police_applications',db);if(correctionError)return json({error:correctionError},409);
     if (action === "reject" && app.status !== "pending") {
       return json({ error: "Esta candidatura ya fue revisada y no se ha cambiado." }, 409);
     }
-    if (action === "accept" && app.status !== "pending" && !retryRole) {
+    if (action === "accept" && app.status !== "pending" && !retryRole&&!correcting) {
       return json({ error: "Esta candidatura ya está aceptada y el rol consta como asignado." }, 409);
     }
 
@@ -440,7 +447,7 @@ async function decide(req: Request) {
     let filter: string;
     if (action === "accept") {
       patch = {
-        ...(app.status === "pending" ? {
+        ...(isNewDecision ? {
           status: "accepted",
           reviewed_by_discord_id: reviewerId,
           reviewed_by_name: reviewerName,
@@ -449,8 +456,8 @@ async function decide(req: Request) {
         role_assigned_at: now,
         ...(reason ? { decision_reason: reason } : {}),
       };
-      filter = app.status === "pending"
-        ? "&status=eq.pending"
+      filter = isNewDecision
+        ? "&status=eq."+app.status
         : "&status=eq.accepted&role_assigned_at=is.null";
     } else {
       patch = {
@@ -486,6 +493,7 @@ async function decide(req: Request) {
         {name:'Nombre del personaje',value:String(app.full_name||'No indicado')},
         {name:'Asignación',value:'<@&'+PRESELECTION_ROLE_ID+'>'},
         {name:'Revisada por',value:'<@'+reviewerId+'>\n'+reviewerName},
+        ...(correcting?[{name:'Corrección de rechazo',value:'Rechazo anterior: '+String(app.reviewed_by_name||app.reviewed_by_discord_id||'No registrado')+' · '+String(app.reviewed_at||'Sin fecha')+' · Motivo: '+String(app.decision_reason||'No indicado'),inline:false}]:[]),
         {name:'Siguiente paso',value:'Entrevista IC con UCOP · Intento '+String(app.attempt_number||1)+' de 3',inline:false},
         ...(reason?[{name:'Observaciones',value:reason,inline:false}]:[])
       ] : [
@@ -559,6 +567,7 @@ async function routePanel(req: Request): Promise<Response> {
   if (action === "oauth-callback" && req.method === "GET") return await finishDiscordOAuth(req);
   if (action === "login" && req.method === "POST") return await login(req);
   if (action === "me" && req.method === "GET") return await currentUser(req);
+  if(action==='application-review'){if(!await authorizedUser(req))return json({error:'Sesión caducada o sin permisos de gestión.'},403);return applicationReview(req,db,json);}
   if(action==='personnel-profile'||['personnel-note-add','personnel-note-edit','personnel-note-archive'].includes(action||'')){
    const actor=await authorizedUser(req);if(!actor)return json({error:'Sesión caducada o sin permisos de gestión.'},403);
    const member=await accessMember(actor);return managePersonnelProfile(req,action,actor,{db,json,actorName:String(member.nick||member.user?.global_name||member.user?.username||actor)});

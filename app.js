@@ -241,13 +241,14 @@ function renderApplications() {
       done.textContent = app.status === "accepted" ? "Rol confirmado: " + niceDate(app.role_assigned_at) : "Revisada: " + niceDate(app.reviewed_at);
       actions.append(done);
     }
+    if(app.status==='rejected')actions.append(decisionButton('Corregir y aceptar','accept','accept correction-accept',app));
     const spacer = document.createElement("span");
     spacer.className = "spacer";
     const updated = document.createElement("span");
     updated.className = "muted";
     updated.textContent = decisionCredit(app);
     actions.append(spacer, updated);
-    card.append(head, grid, actions);
+    card.append(head, grid, applicationReviewPanel(app), actions);
     list.append(card);
   });
 }
@@ -292,7 +293,7 @@ function renderTransfers() {
     if(item.status==="pending"){
       const accept=document.createElement("button");accept.className="btn accept";accept.textContent="Aceptar y asignar rol Traslado";accept.onclick=()=>reviewTransfer(item,"accept",accept);
       const reject=document.createElement("button");reject.className="btn reject";reject.textContent="Rechazar";reject.onclick=()=>reviewTransfer(item,"reject",reject);actions.append(accept,reject);
-    } else {const done=document.createElement("span");done.className="muted";done.textContent=(item.status==="accepted"?"Rol Traslado asignado · ":"Revisada · ")+niceDate(item.reviewed_at);actions.append(done);}
+    } else {const done=document.createElement("span");done.className="muted";done.textContent=(item.status==="accepted"?"Rol Traslado asignado · ":"Revisada · ")+niceDate(item.reviewed_at);actions.append(done);if(item.status==='rejected'){const restore=document.createElement('button');restore.type='button';restore.className='btn accept correction-accept';restore.textContent='Corregir y aceptar';restore.onclick=()=>reviewTransfer(item,'accept',restore);actions.append(restore);}}
     if(item.status==='accepted'){
       if(item.admitted_at){const entered=document.createElement('span');entered.className='badge accepted';entered.textContent='Ingresado en Personal · '+niceDate(item.admitted_at);actions.append(entered);}
       else{const enter=document.createElement('button');enter.type='button';enter.className='btn primary';enter.textContent='Ingresar a la base';enter.addEventListener('click',()=>openPreselectionAdmission(item,'transfer'));actions.append(enter);}
@@ -307,10 +308,11 @@ async function loadTransfers(){
   finally{button.disabled=false;button.textContent="Actualizar";}
 }
 async function reviewTransfer(item,action,button){
+  let correctionReason='';if(action==='accept'&&item.status==='rejected'){const entered=prompt('Motivo para corregir este rechazo y aceptar el traslado:','');if(entered===null)return;correctionReason=entered.trim();if(correctionReason.length<3){showToast('Indica un motivo de al menos 3 caracteres.');return;}}
   if(action==="accept"&&!confirm("¿Aceptar el traslado de "+item.full_name+" y asignarle el rol Traslado para coordinar una entrevista IC?"))return;
   if(action==="reject"&&!confirm("¿Rechazar la solicitud de traslado de "+item.full_name+"?"))return;
-  const reason=action==="reject"?(prompt("Motivo de la decisión (opcional):","")||""):"";button.disabled=true;const old=button.textContent;button.textContent="Procesando…";
-  try{const result=await request("transfer-decision",{method:"POST",body:{id:item.id,action,reason}});showToast(result.message||result.warning|| (action==="accept"?"Traslado aceptado y rol asignado.":"Traslado rechazado."));await loadTransfers();}
+  const reason=correctionReason||(action==="reject"?(prompt("Motivo de la decisión (opcional):","")||""):"");button.disabled=true;const old=button.textContent;button.textContent="Procesando…";
+  try{const result=await request("transfer-decision",{method:"POST",body:{id:item.id,action,reason,correct_rejection:action==='accept'&&item.status==='rejected'}});showToast(result.message||result.warning|| (action==="accept"?"Traslado aceptado y rol asignado.":"Traslado rechazado."));await loadTransfers();}
   catch(error){showToast(error.message);button.disabled=false;button.textContent=old;await loadTransfers();}
 }
 function renderPreselections() {
@@ -381,6 +383,7 @@ async function reviewRankRequest(item,decision,button) {
 async function decide(app, action, button) {
   if (action === "accept" && !confirm("¿Aceptar a " + app.full_name + " y asignarle el rol Preselección en Discord? El rol de Policía se asignará después de la entrevista, al aprobar su solicitud de rango.")) return;
   let reason = "";
+  if(action==='accept'&&app.status==='rejected'){const entered=prompt('Motivo para corregir este rechazo y aceptar la postulación:','');if(entered===null)return;reason=entered.trim();if(reason.length<3){showToast('Indica un motivo de al menos 3 caracteres.');return;}}
   if (action === "reject") {
     if (!confirm("¿Rechazar la candidatura de " + app.full_name + "?")) return;
     reason = prompt("Motivo del rechazo (opcional):", "") || "";
@@ -389,7 +392,7 @@ async function decide(app, action, button) {
   const previous = button.textContent;
   button.textContent = "Procesando…";
   try {
-    const result = await request("decision", {method:"POST",body:{id:app.id,action,reason}});
+    const result = await request("decision", {method:"POST",body:{id:app.id,action,reason,correct_rejection:action==='accept'&&app.status==='rejected'}});
     if (result.pending_approval) showToast(result.message);
     else if (result.warning) showToast(result.warning);
     else showToast(action === "accept" ? "Candidatura aceptada y rol Preselección asignado." : "Candidatura rechazada y reflejada en Discord.");

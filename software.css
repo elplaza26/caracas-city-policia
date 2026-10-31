@@ -7,3 +7,5 @@
 @media(max-width:620px){.mobile-record-table tbody td:last-child:before{flex-basis:100%;margin-bottom:2px}.mobile-record-table tbody td:last-child>.btn{flex:1;min-width:110px}.sidebar-brand .eyebrow{font-size:8px}.sidebar-brand h2{font-size:14px}.crest{width:40px;height:40px}.sidebar-brand small{font-size:10px}}
 .personnel-status.on-absence{background:#3c321c!important;color:#f2c96a!important;border-color:#79612d!important}.absence-row{background:#2b281e;border-color:#625431}#absenceRegisterForm textarea{width:100%;box-sizing:border-box}#absenceRegisterFeedback{color:#e8bf7a;white-space:pre-wrap}#absenceRosterPanel{margin-top:18px}#absenceRequestsPanel{margin-top:18px}
 .admission-confirm{display:flex;align-items:flex-start;gap:10px;margin:20px 0;font-size:13px;line-height:1.5}.admission-confirm input[type=checkbox]{width:18px;min-width:18px;height:18px;min-height:18px;margin:1px 0 0}#preselectionAdmissionFeedback{color:#e8bf7a;white-space:pre-wrap}
+
+.btn.correction-accept{background:#15803d;border-color:#22c55e;color:#fff}.btn.correction-accept:hover{background:#166534}

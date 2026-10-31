@@ -22,6 +22,7 @@ jobs:
       - name: Check client scripts
         run: |
           node --check app.js
+          node --check application-review-ui.js
           node --check personnel-profile.js
           node --check auto-plates.js
           node --check shifts.js
@@ -45,6 +46,7 @@ jobs:
           node scripts/check-application-identity.mjs
           node --experimental-strip-types scripts/check-panel-origins.mjs
           node --experimental-strip-types scripts/check-rejection-roles.mjs
+          node --experimental-strip-types scripts/check-application-tools.mjs
           npm run build
           node scripts/check-public-build.mjs
       - name: Upload site

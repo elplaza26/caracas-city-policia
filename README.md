@@ -121,3 +121,11 @@ Al guardar un nuevo rechazo se sincroniza Rechazado 1 (1565810468059357194), Rec
 Al aceptar una postulación o un traslado se retiran los tres marcadores de rechazo después de guardar la aceptación, conservando los demás roles. Si Discord no permite completar la limpieza, la web informa con una advertencia sin convertir una aceptación guardada en un error.
 
 La migración 20261030225953_panel_session_week_long_timeout.sql amplía las sesiones nuevas a 7 días y el límite de inactividad a 24 horas, conservando revocación manual, caducidad absoluta, aislamiento por usuario y comprobación de roles. Las sesiones anteriores conservan la caducidad de su firma original hasta volver a iniciar sesión. La credencial permanece en sessionStorage: cerrar la pestaña requiere iniciar sesión de nuevo.
+
+## Corrección de rechazos y revisión interna
+
+En Rechazadas, Corregir y aceptar solicita un motivo y usa los mismos permisos de Directiva y propuestas UCOP. Comprueba solicitudes posteriores pendientes o aceptadas, aplica la aceptación, retira marcadores de rechazo y conserva la revisión anterior en auditoría. También está disponible en Traslados.
+
+Cada postulación incluye una revisión interna orientativa: referencias explícitas a asistentes, repeticiones entre apartados y coincidencias exactas de respuestas de más de 120 caracteres con hasta 200 solicitudes recientes de otras cuentas. No calcula probabilidades de IA, no acredita autoría humana, no decide rechazos y no transmite respuestas a servicios externos. La lectura requiere un rol gestor validado en el servidor.
+
+La postulación de Discord tiene dos pasos privados: nombre IC, edad IC y edad OOC separados, y después cuatro preguntas. Los borradores están ligados a la cuenta y al servidor, caducan en 30 minutos y no consumen intentos. Se conserva la validación de esperas y duplicados de la RPC final. Los formularios antiguos abiertos siguen siendo compatibles. La migración 20261031075650_private_application_identity_drafts.sql mantiene los borradores fuera del acceso de anon/authenticated.
