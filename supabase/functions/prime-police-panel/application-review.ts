@@ -17,5 +17,24 @@ export async function applicationReview(req:Request,db:any,json:any){
  const id=new URL(req.url).searchParams.get('id')||'';if(!/^[0-9a-f-]{36}$/i.test(id))return json({error:'Solicitud inválida.'},400);
  const found=await db('police_applications?select=id,discord_user_id,answers&id=eq.'+id+'&limit=1');if(!found?.length)return json({error:'No se encontró la postulación.'},404);
  const others=await db('police_applications?select=discord_user_id,answers&id=neq.'+id+'&order=created_at.desc&limit=200');
- return json({ok:true,...reviewApplicationAnswers(found[0],others||[])});
+ const reviews=await db('police_application_reviews?select=id,verdict,note,reviewed_by_discord_id,reviewed_by_name,created_at&application_id=eq.'+id+'&order=created_at.desc,id.desc&limit=5');
+ return json({ok:true,...reviewApplicationAnswers(found[0],others||[]),reviews:reviews||[]});
+}
+export async function saveApplicationReview(req:Request,db:any,json:any,actor:string,actorName:string){
+ if(req.method!=='POST')return json({error:'Método no permitido.'},405);
+ let body:any;try{body=await req.json();}catch{return json({error:'Solicitud inválida.'},400);}
+ const id=String(body.id||''),reviewId=String(body.review_id||''),verdict=String(body.verdict||''),note=String(body.note||'').trim();
+ if(!/^[a-f0-9-]{36}$/i.test(id)||!/^[a-f0-9-]{36}$/i.test(reviewId)||!['reviewed','suspected_ai','declared_ai'].includes(verdict)||note.length<3||note.length>2000)return json({error:'Selecciona una marca y añade una observación de entre 3 y 2000 caracteres.'},400);
+ const matches=(row:any)=>row.application_id===id&&row.reviewed_by_discord_id===actor&&row.verdict===verdict&&row.note===note;
+ const previous=await db('police_application_reviews?select=*&id=eq.'+reviewId+'&limit=1');
+ if(previous?.length)return matches(previous[0])?json({ok:true,review:previous[0]}):json({error:'Esta referencia ya corresponde a otra constancia. Actualiza la ficha.'},409);
+ const application=await db('police_applications?select=id&id=eq.'+id+'&limit=1');if(!application?.length)return json({error:'La postulación ya no existe.'},404);
+ try{
+  const rows=await db('police_application_reviews',{method:'POST',body:JSON.stringify({id:reviewId,application_id:id,verdict,note,reviewed_by_discord_id:actor,reviewed_by_name:actorName})});
+  return json({ok:true,review:rows?.[0],message:'Constancia interna guardada. La decisión de la postulación sigue siendo manual.'});
+ }catch(error){
+  const rows=await db('police_application_reviews?select=*&id=eq.'+reviewId+'&limit=1');
+  if(rows?.length&&matches(rows[0]))return json({ok:true,review:rows[0]});
+  throw error;
+ }
 }

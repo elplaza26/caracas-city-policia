@@ -47,6 +47,7 @@ jobs:
           node --experimental-strip-types scripts/check-panel-origins.mjs
           node --experimental-strip-types scripts/check-rejection-roles.mjs
           node --experimental-strip-types scripts/check-application-tools.mjs
+          node --experimental-strip-types scripts/check-manual-application-review.mjs
           npm run build
           node scripts/check-public-build.mjs
       - name: Upload site

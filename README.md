@@ -129,3 +129,9 @@ En Rechazadas, Corregir y aceptar solicita un motivo y usa los mismos permisos d
 Cada postulación incluye una revisión interna orientativa: referencias explícitas a asistentes, repeticiones entre apartados y coincidencias exactas de respuestas de más de 120 caracteres con hasta 200 solicitudes recientes de otras cuentas. No calcula probabilidades de IA, no acredita autoría humana, no decide rechazos y no transmite respuestas a servicios externos. La lectura requiere un rol gestor validado en el servidor.
 
 La postulación de Discord tiene dos pasos privados: nombre IC, edad IC y edad OOC separados, y después cuatro preguntas. Los borradores están ligados a la cuenta y al servidor, caducan en 30 minutos y no consumen intentos. Se conserva la validación de esperas y duplicados de la RPC final. Los formularios antiguos abiertos siguen siendo compatibles. La migración 20261031075650_private_application_identity_drafts.sql mantiene los borradores fuera del acceso de anon/authenticated.
+
+## Decisión manual y constancia de revisión
+
+UCOP puede aceptar postulaciones y corregir rechazos directamente; no cambia la autorización requerida para ascensos, sanciones, traslados u otras operaciones. La revisión orientativa de textos nunca acepta ni rechaza una candidatura.
+
+Los gestores pueden guardar una constancia interna: revisada sin marca de IA, posible uso de IA, o uso declarado por el postulante, junto con observación. La identidad y la fecha se guardan en el servidor. Las constancias son nuevas entradas de historial, no sustituyen notas anteriores; los reintentos reutilizan una referencia para impedir duplicados. Solo se muestran las cinco más recientes en la ficha. La tabla police_application_reviews tiene RLS y acceso exclusivo del servidor; no permite UPDATE/DELETE al rol de servicio. Guardar una constancia no modifica el estado ni los roles de la solicitud.

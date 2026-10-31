@@ -119,6 +119,7 @@ export async function interceptChanges(req:Request,action:string,c:Context):Prom
   });
  }
  if(action==='absence-register'||action==='absence-review')return null;
+ if(action==='decision'&&payload.action==='accept'&&(member.roles||[]).includes('1539970134519578773'))return null;
  if(isDirector||((action==='shift-close'||action==='shift-delete')&&(member.roles||[]).includes('1539970134519578773')))return null;
  try{
   const before=await snapshot(action,payload,c);

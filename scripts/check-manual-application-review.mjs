@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {saveApplicationReview} from '../supabase/functions/prime-police-panel/application-review.ts';
+const appId='aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',reviewId='bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',actor='111111111111111111';
+const rows=[];let inserts=0;
+const db=async(path,init)=>{if(path.startsWith('police_applications'))return[{id:appId,status:'pending'}];if(init){assert.equal(path,'police_application_reviews');assert.equal(init.method,'POST');const row=JSON.parse(init.body);inserts++;rows.push(row);return[row];}return rows.filter(row=>path.includes('id=eq.'+row.id));};
+const json=(body,status=200)=>Response.json(body,{status});
+const body={id:appId,review_id:reviewId,verdict:'suspected_ai',note:'Revisar en entrevista IC',reviewed_by_discord_id:'spoof',reviewed_by_name:'spoof'};
+const req=value=>new Request('https://test.local',{method:'POST',body:JSON.stringify(value)});
+let r=await saveApplicationReview(req(body),db,json,actor,'UCOP de ejemplo');assert.equal(r.status,200);assert.equal(rows[0].reviewed_by_discord_id,actor);assert.equal(rows[0].reviewed_by_name,'UCOP de ejemplo');
+r=await saveApplicationReview(req(body),db,json,actor,'UCOP de ejemplo');assert.equal(r.status,200);assert.equal(inserts,1);
+r=await saveApplicationReview(req({...body,note:'Otra nota'}),db,json,actor,'UCOP');assert.equal(r.status,409);assert.equal(inserts,1);
+r=await saveApplicationReview(req({...body,note:'x'}),db,json,actor,'UCOP');assert.equal(r.status,400);
+console.log('Manual review: trusted author, append-only writes, idempotent retry, conflict protection, validation and no application decision: PASS');

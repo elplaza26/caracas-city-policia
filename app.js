@@ -101,7 +101,7 @@ async function loadAccountProfile() {
     const user = result.user || {};
     canAuthorizePromotions=Boolean(user.can_authorize_promotions);
     canManageShiftsDirect=Boolean(user.can_manage_shifts_direct);
-    $('managementPolicy').textContent=canAuthorizePromotions?'Directiva: puedes aplicar cambios y revisar las propuestas del panel principal.':canManageShiftsDirect?'UCOP: puedes cerrar y eliminar bitácoras directamente. Los demás cambios requieren aprobación de Directiva.':'Puedes preparar cualquier cambio. Quedará pendiente en el panel principal hasta que Directiva lo apruebe.';
+    $('managementPolicy').textContent=canAuthorizePromotions?'Directiva: puedes aplicar cambios y revisar las propuestas del panel principal.':canManageShiftsDirect?'UCOP: puedes aceptar postulaciones y cerrar o eliminar bitácoras directamente. Los demás cambios requieren aprobación de Directiva.':'Puedes preparar cualquier cambio. Quedará pendiente en el panel principal hasta que Directiva lo apruebe.';
     $("accountName").textContent = user.display_name || user.username || "Cuenta Discord";
     $("accountId").textContent = (user.username ? "@" + user.username + " · " : "") + "ID " + (user.id || "—");
     const accessRoles = Array.isArray(user.access_roles) ? user.access_roles : [];

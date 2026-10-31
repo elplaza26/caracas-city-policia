@@ -1,7 +1,7 @@
 import { parseApplicationIdentity } from "../_shared/application-identity.ts";
 import { syncRejectionRole, clearRejectionRoles } from "./rejection-roles.ts";
 import { validateDecisionCorrection } from "./decision-correction.ts";
-import { applicationReview } from "./application-review.ts";
+import { applicationReview, saveApplicationReview } from "./application-review.ts";
 import { PANEL_SITE_URL, PANEL_ORIGIN, isPanelOrigin, panelResponseHeaders } from "./site-config.ts";
 import { scheduleAcceptedPublicList } from "./public-accepted.ts";
 import { preparePlate } from "./plates.ts";
@@ -568,6 +568,7 @@ async function routePanel(req: Request): Promise<Response> {
   if (action === "login" && req.method === "POST") return await login(req);
   if (action === "me" && req.method === "GET") return await currentUser(req);
   if(action==='application-review'){if(!await authorizedUser(req))return json({error:'Sesión caducada o sin permisos de gestión.'},403);return applicationReview(req,db,json);}
+  if(action==='application-review-save'){const actor=await authorizedUser(req);if(!actor)return json({error:'Sesión caducada o sin permisos de gestión.'},403);const member=await accessMember(actor);return saveApplicationReview(req,db,json,actor,String(member.nick||member.user?.global_name||member.user?.username||actor));}
   if(action==='personnel-profile'||['personnel-note-add','personnel-note-edit','personnel-note-archive'].includes(action||'')){
    const actor=await authorizedUser(req);if(!actor)return json({error:'Sesión caducada o sin permisos de gestión.'},403);
    const member=await accessMember(actor);return managePersonnelProfile(req,action,actor,{db,json,actorName:String(member.nick||member.user?.global_name||member.user?.username||actor)});
