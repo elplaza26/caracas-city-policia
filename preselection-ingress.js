@@ -1,5 +1,13 @@
 let admissionCandidate=null,admissionOperation='',admissionSaving=false,admissionSource='preselection';
+function appendAdmissionAction(container,person,source='preselection'){
+ if(person.personnel_registered===false&&!person.personnel_membership_unavailable){
+  const button=document.createElement('button');button.type='button';button.className='btn primary';button.textContent='Ingresar a la base';button.addEventListener('click',()=>openPreselectionAdmission(person,source));container.append(button);
+ }else{
+  const label=document.createElement('span');label.className='muted';label.textContent=person.personnel_registered===true?'Ya registrado en Personal':'Actualiza para comprobar su registro en Personal';container.append(label);
+ }
+}
 async function openPreselectionAdmission(person,source='preselection'){
+ if(person.personnel_registered===true){showToast('Ya tiene una ficha. Revísala desde Personal.');return;}
  if(admissionSaving)return;admissionSource=source;admissionCandidate={...person};admissionOperation=crypto.randomUUID();$('preselectionAdmissionForm').reset();
  $('admissionDiscord').value=(person.discord_username||'Discord')+' · '+person.discord_user_id;$('admissionName').value=person.full_name||'';
  $('preselectionAdmissionFeedback').textContent='';suggestNextPlate($('admissionPlate'),admissionOperation);

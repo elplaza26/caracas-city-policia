@@ -297,7 +297,7 @@ function renderTransfers() {
     } else {const done=document.createElement("span");done.className="muted";done.textContent=(item.status==="accepted"?"Rol Traslado asignado · ":"Revisada · ")+niceDate(item.reviewed_at);actions.append(done);if(item.status==='rejected'){const restore=document.createElement('button');restore.type='button';restore.className='btn accept correction-accept';restore.textContent='Corregir y aceptar';restore.onclick=()=>reviewTransfer(item,'accept',restore);actions.append(restore);}}
     if(item.status==='accepted'){
       if(item.admitted_at){const entered=document.createElement('span');entered.className='badge accepted';entered.textContent='Ingresado en Personal · '+niceDate(item.admitted_at);actions.append(entered);}
-      else{const enter=document.createElement('button');enter.type='button';enter.className='btn primary';enter.textContent='Ingresar a la base';enter.addEventListener('click',()=>openPreselectionAdmission(item,'transfer'));actions.append(enter);}
+      else appendAdmissionAction(actions,item,'transfer');
     }
     const spacer=document.createElement("span");spacer.className="spacer";const reviewer=document.createElement("span");reviewer.className="muted";reviewer.textContent=decisionCredit(item);actions.append(spacer,reviewer);card.append(head,previousRejectionsPanel(item),automaticReviewNotice(item),grid,actions);list.append(card);
   });
@@ -323,7 +323,7 @@ function renderPreselections() {
   $("preselectionCount").textContent="· "+visible.length+(visible.length===preselections.length?"":" de "+preselections.length)+" personas";
   rows.replaceChildren();
   if(!visible.length){const tr=document.createElement("tr"),td=document.createElement("td");td.colSpan=5;td.className="muted";td.textContent=preselections.length?"No hay preseleccionados que coincidan con la búsqueda.":"No hay personas pendientes de pasar a Personal de Policía.";tr.append(td);rows.append(tr);return;}
-  visible.forEach(person=>{const tr=document.createElement("tr");[person.full_name||"Sin nombre IC",(person.discord_username?"@"+person.discord_username+" · ":"")+person.discord_user_id,niceDate(person.accepted_at)].forEach(value=>{const td=document.createElement("td");td.textContent=value;tr.append(td);});const state=document.createElement("td"),badge=document.createElement("span");badge.className="badge pending";badge.textContent="Preseleccionado";state.append(badge);tr.append(state);const actions=document.createElement("td"),button=document.createElement("button");button.type="button";button.className="btn primary";button.textContent="Ingresar a la base";button.addEventListener("click",()=>openPreselectionAdmission(person));actions.append(button);tr.append(actions);rows.append(tr);});
+  visible.forEach(person=>{const tr=document.createElement("tr");[person.full_name||"Sin nombre IC",(person.discord_username?"@"+person.discord_username+" · ":"")+person.discord_user_id,niceDate(person.accepted_at)].forEach(value=>{const td=document.createElement("td");td.textContent=value;tr.append(td);});const state=document.createElement("td"),badge=document.createElement("span");badge.className="badge "+(person.personnel_registered===true?"accepted":"pending");badge.textContent=person.personnel_registered===true?"En Personal":"Preseleccionado";state.append(badge);tr.append(state);const actions=document.createElement("td");appendAdmissionAction(actions,person);tr.append(actions);rows.append(tr);});
 }
 async function loadPreselections(){
   const rows=$("preselectionRows");rows.innerHTML='<tr><td colspan="5" class="muted">Cargando preseleccionados…</td></tr>';
@@ -628,3 +628,4 @@ if (oauthErrorFromUrl) {
   showLogin();
 }
 $("refreshAuthorizations").addEventListener("click",loadRankAuthorizations);
+
