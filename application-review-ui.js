@@ -1,3 +1,19 @@
+function previousRejectionsPanel(item){
+ const box=document.createElement('section');
+ if(Number(item.attempt_number)<=1||!Number(item.attempt_number))return box;
+ box.className='detail';box.style.marginBottom='14px';
+ const heading=document.createElement('strong');heading.textContent='Rechazos de intentos anteriores';box.append(heading);
+ if(item.rejection_history_unavailable||!Array.isArray(item.previous_rejections)){
+  const message=document.createElement('p');message.textContent='No se pudo cargar el historial. Pulsa Actualizar para reintentarlo.';box.append(message);return box;
+ }
+ if(!item.previous_rejections.length){const message=document.createElement('p');message.textContent='No constan rechazos anteriores en este historial.';box.append(message);return box;}
+ for(const old of item.previous_rejections){
+  const entry=document.createElement('div'),title=document.createElement('p'),reason=document.createElement('p'),by=document.createElement('small');
+  title.textContent='Intento '+old.attempt_number+' · Rechazado';reason.textContent=old.decision_reason||'Motivo no registrado';reason.style.whiteSpace='pre-wrap';reason.style.overflowWrap='anywhere';
+  by.className='muted';by.textContent=decisionCredit({...old,status:'rejected'});entry.append(title,reason,by);box.append(entry);
+ }
+ return box;
+}
 function automaticReviewNotice(item){
  const review=item.automatic_review,box=document.createElement('div');
  if(!review)return box;

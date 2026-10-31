@@ -49,6 +49,7 @@ jobs:
           node --experimental-strip-types scripts/check-application-tools.mjs
           node --experimental-strip-types scripts/check-manual-application-review.mjs
           node --experimental-strip-types scripts/check-automatic-review-alerts.mjs
+          node --experimental-strip-types scripts/check-rejection-history.mjs
           npm run build
           node scripts/check-public-build.mjs
       - name: Upload site

@@ -1,4 +1,5 @@
 import {createReviewCache,reviewSubmissionAnswers} from './application-review.ts';
+import {attachRejectionHistory} from './rejection-history.ts';
 const kinds:Record<string,{table:string,search:string[],date:string,statuses:string[]}>={
  absences:{table:'police_absence_requests',search:['full_name','discord_username','discord_user_id','plate'],date:'created_at',statuses:['pending','approved','rejected','cancelled']},
  applications:{table:'police_applications',search:['full_name','discord_username','discord_user_id','answers->>character_info'],date:'created_at',statuses:['pending','accepted','rejected']},
@@ -29,6 +30,7 @@ export async function listPagedRecords(req:Request,json:(v:unknown,status?:numbe
  const ordering=kind==='personnel'?'plate_number.asc.nullslast,plate.asc,discord_user_id.asc':config.date+'.desc,'+(kind==='preselections'?'discord_user_id':'id')+'.desc';
  const table=review==='ai'?'police_rejected_ai_applications':config.table;
  const result=await query(table+'?select='+projection+'&order='+ordering+'&limit='+limit+'&offset='+offset+filter);
+ if(['applications','transfers'].includes(kind))result.rows=await attachRejectionHistory(result.rows,config.table,query);
  if(['applications','transfers'].includes(kind)&&result.rows.length){
   try{
    const sample=await query(config.table+'?select=id,discord_user_id,'+(kind==='applications'?'answers':'reason')+'&order=created_at.desc,id.desc&limit=200');
