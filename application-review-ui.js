@@ -1,3 +1,14 @@
+function automaticReviewNotice(item){
+ const review=item.automatic_review,box=document.createElement('div');
+ if(!review)return box;
+ box.className='detail';box.style.marginBottom='14px';box.setAttribute('role','status');
+ if(review.unavailable){box.textContent='Análisis automático no disponible. Actualiza para reintentarlo; puedes revisar y decidir manualmente.';return box;}
+ if(!review.flags?.length){box.textContent='Análisis automático: sin indicios de copia o referencias a IA. Esto no confirma autoría humana.';return box;}
+ box.style.borderColor='#d5ad5a';
+ const heading=document.createElement('strong');heading.textContent='⚠ Revisar respuestas · posibles indicios de copia o IA';box.append(heading);
+ for(const flag of review.flags){const text=document.createElement('p');text.textContent=flag.question+' · '+flag.title+': '+flag.detail;box.append(text);}
+ const note=document.createElement('small');note.textContent='Aviso orientativo, no un veredicto de IA. Comparación privada con hasta 200 solicitudes recientes. UCOP o Directiva deciden; no hay aceptación ni rechazo automático.';box.append(note);return box;
+}
 function applicationReviewPanel(app){
  const box=document.createElement('details');box.className='detail';box.style.marginBottom='14px';
  const title=document.createElement('summary');title.textContent='Revisión interna · IA y coincidencias';title.style.cursor='pointer';

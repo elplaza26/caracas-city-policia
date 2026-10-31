@@ -1,16 +1,36 @@
 const questions:Record<string,string>={motivation:'Motivación',detention_rights:'Responsabilidad y órdenes',scene_resolution:'Mala praxis',roleplay_response:'Situaciones policiales'};
 const normalize=(value:unknown)=>String(value||'').normalize('NFKC').toLocaleLowerCase('es').replace(/[^\p{L}\p{N}]+/gu,' ').trim();
-export function reviewApplicationAnswers(current:any,others:any[]){
- const flags:any[]=[];const entries=Object.entries(questions).map(([key,label])=>({key,label,text:String(current.answers?.[key]||'')}));
+export const createReviewCache=()=>({normalized:new Map<string,string>(),signatures:new Map<string,{words:number,grams:Set<string>}>()});
+type ReviewCache=ReturnType<typeof createReviewCache>;
+function signature(text:string,cache:ReviewCache){
+ let value=cache.signatures.get(text);if(!value){const words=text.split(' ');value={words:words.length,grams:new Set(words.slice(0,-4).map((_,i)=>words.slice(i,i+5).join(' ')))};cache.signatures.set(text,value);}return value;
+}
+function similar(a:string,b:string,cache:ReviewCache){
+ if(a.length<180||b.length<180)return false;
+ if(Math.min(a.length,b.length)/Math.max(a.length,b.length)<0.8)return false;
+ const left=signature(a,cache),right=signature(b,cache);if(Math.min(left.words,right.words)<35)return false;
+ const x=left.grams,y=right.grams;let shared=0;for(const gram of x)if(y.has(gram))shared++;
+ return shared/(x.size+y.size-shared)>=0.8;
+}
+export function reviewApplicationAnswers(current:any,others:any[],fields:Record<string,string>=questions,cache=createReviewCache()){
+ const normalizedText=(value:unknown)=>{const text=String(value||'').slice(0,6000);if(!cache.normalized.has(text))cache.normalized.set(text,normalize(text));return cache.normalized.get(text)!;};
+ const flags:any[]=[];const entries=Object.entries(fields).map(([key,label])=>({key,label,text:String(current.answers?.[key]||'').slice(0,6000)}));
+ const candidates=others.filter(other=>String(other.discord_user_id)!==String(current.discord_user_id)).map(other=>Object.keys(fields).map(key=>normalizedText(other.answers?.[key])));
  for(const entry of entries){
   const match=entry.text.match(/como (?:un )?(?:modelo de lenguaje|inteligencia artificial|asistente de ia)|as an ai (?:language model|assistant)|(?:chatgpt|claude|gemini)\s*:\s*/i);
   if(match)flags.push({question:entry.label,title:'Referencia explícita a un asistente',detail:'Fragmento encontrado: «'+entry.text.slice(Math.max(0,(match.index||0)-20),(match.index||0)+140)+'». Puede ser una cita; compruébalo en entrevista.'});
-  const normalized=normalize(entry.text);if(normalized.length<120)continue;
-  if(entries.some(other=>other.key<entry.key&&normalize(other.text)===normalized))flags.push({question:entry.label,title:'Respuesta repetida entre apartados',detail:'El mismo texto aparece en otra pregunta de esta solicitud.'});
-  const matches=others.filter(other=>String(other.discord_user_id)!==String(current.discord_user_id)&&Object.keys(questions).some(key=>normalize(other.answers?.[key])===normalized));
+  const normalized=normalizedText(entry.text);if(normalized.length<120)continue;
+  if(entries.some(other=>other.key<entry.key&&normalizedText(other.text)===normalized))flags.push({question:entry.label,title:'Respuesta repetida entre apartados',detail:'El mismo texto aparece en otra pregunta de esta solicitud.'});
+  const matches=candidates.filter(texts=>texts.includes(normalized));
   if(matches.length)flags.push({question:entry.label,title:'Coincidencia exacta con otras solicitudes',detail:'Esta respuesta coincide con '+matches.length+' solicitud(es) de otras personas en la muestra consultada. Una coincidencia no demuestra uso de IA.'});
+  else {const close=candidates.filter(texts=>texts.some(text=>similar(normalized,text,cache)));if(close.length)flags.push({question:entry.label,title:'Texto muy similar a otras solicitudes',detail:'Se encontraron secuencias de palabras muy similares en '+close.length+' solicitud(es) de otras personas. Puede ser una plantilla compartida o una copia; no demuestra uso de IA.'});}
  }
  return {flags,compared:others.length,notice:'Revisión orientativa: no determina si un texto fue escrito por IA. No uses estas señales como único motivo de rechazo; confirma las respuestas en entrevista IC. No se envía ningún texto a servicios externos.'};
+}
+export function reviewSubmissionAnswers(kind:string,current:any,others:any[],cache=createReviewCache()){
+ if(kind==='applications')return reviewApplicationAnswers(current,others.filter(row=>String(row.id)!==String(current.id)),questions,cache);
+ const convert=(row:any)=>({...row,answers:{reason:row.reason}});
+ return reviewApplicationAnswers(convert(current),others.filter(row=>String(row.id)!==String(current.id)).map(convert),{reason:'Motivo del traslado'},cache);
 }
 export async function applicationReview(req:Request,db:any,json:any){
  if(req.method!=='GET')return json({error:'Método no permitido.'},405);

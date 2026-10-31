@@ -249,7 +249,7 @@ function renderApplications() {
     updated.className = "muted";
     updated.textContent = decisionCredit(app);
     actions.append(spacer, updated);
-    card.append(head, grid, applicationReviewPanel(app), actions);
+    card.append(head, automaticReviewNotice(app), grid, applicationReviewPanel(app), actions);
     list.append(card);
   });
 }
@@ -299,7 +299,7 @@ function renderTransfers() {
       if(item.admitted_at){const entered=document.createElement('span');entered.className='badge accepted';entered.textContent='Ingresado en Personal · '+niceDate(item.admitted_at);actions.append(entered);}
       else{const enter=document.createElement('button');enter.type='button';enter.className='btn primary';enter.textContent='Ingresar a la base';enter.addEventListener('click',()=>openPreselectionAdmission(item,'transfer'));actions.append(enter);}
     }
-    const spacer=document.createElement("span");spacer.className="spacer";const reviewer=document.createElement("span");reviewer.className="muted";reviewer.textContent=decisionCredit(item);actions.append(spacer,reviewer);card.append(head,grid,actions);list.append(card);
+    const spacer=document.createElement("span");spacer.className="spacer";const reviewer=document.createElement("span");reviewer.className="muted";reviewer.textContent=decisionCredit(item);actions.append(spacer,reviewer);card.append(head,automaticReviewNotice(item),grid,actions);list.append(card);
   });
 }
 async function loadTransfers(){
